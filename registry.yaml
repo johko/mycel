@@ -1,0 +1,22 @@
+nodes:
+  - id: energy-wizards
+    title: Energy Wizards
+    description: >
+      Power grid data and consumption records of the MICE campus.
+      Returns aggregates and trends only; raw consumption values are
+      blocked by policy.
+    endpoint: http://localhost:8001
+
+  - id: commons-scholars
+    title: Commons Scholars
+    description: >
+      Public research papers, datasets, and publication statistics of
+      MICE. Open data; answers carry an attribution obligation.
+    endpoint: http://localhost:8002
+
+  - id: archivists
+    title: Archivists
+    description: >
+      Historical records, staffing history, and institutional events of
+      MICE. Personal names and dates of birth are redacted by policy.
+    endpoint: http://localhost:8003

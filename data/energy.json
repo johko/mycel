@@ -1,0 +1,48 @@
+{
+  "E-TOWER-A-2024": {
+    "label": "Tower A consumption 2024 (raw, sensitive)",
+    "site": "Tower A",
+    "year": 2024,
+    "consumption_kwh": 42317,
+    "peak_load_kw": 311,
+    "sensitivity": "high"
+  },
+  "E-TOWER-B-2024": {
+    "label": "Tower B consumption 2024 (raw, sensitive)",
+    "site": "Tower B",
+    "year": 2024,
+    "consumption_kwh": 18733,
+    "peak_load_kw": 144,
+    "sensitivity": "high"
+  },
+  "E-ALCHEMY-LAB-2024": {
+    "label": "Alchemy Lab consumption 2024 (raw, sensitive)",
+    "site": "Alchemy Lab",
+    "year": 2024,
+    "consumption_kwh": 97412,
+    "peak_load_kw": 902,
+    "sensitivity": "high"
+  },
+  "AGG-2015-2019": {
+    "label": "Campus aggregate 2015-2019",
+    "period": "2015-2019",
+    "total_kwh": 2210000,
+    "avg_annual_kwh": 442000,
+    "trend": "flat",
+    "sensitivity": "low"
+  },
+  "AGG-2020-2024": {
+    "label": "Campus aggregate 2020-2024",
+    "period": "2020-2024",
+    "total_kwh": 3140000,
+    "avg_annual_kwh": 628000,
+    "trend": "rising, +42% vs previous five years, driven by lab expansion",
+    "sensitivity": "low"
+  },
+  "AGG-NOTES": {
+    "label": "Aggregate analysis notes 2015-2024",
+    "period": "2015-2024",
+    "note": "Consumption growth concentrates in research lab sites from 2021 onward; office towers are roughly constant. Two consumption spikes (2022, 2024) coincide with new experimental programs.",
+    "sensitivity": "low"
+  }
+}

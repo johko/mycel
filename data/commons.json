@@ -1,0 +1,34 @@
+{
+  "PUB-STATS-2015-2019": {
+    "label": "Publication statistics 2015-2019",
+    "period": "2015-2019",
+    "papers_published": 61,
+    "datasets_released": 9,
+    "top_field": "theoretical commons economics",
+    "source": "MICE Commons Annual Reports 2015-2019"
+  },
+  "PUB-STATS-2020-2024": {
+    "label": "Publication statistics 2020-2024",
+    "period": "2020-2024",
+    "papers_published": 118,
+    "datasets_released": 31,
+    "top_field": "applied thaumic energy systems",
+    "source": "MICE Commons Annual Reports 2020-2024"
+  },
+  "P-2022-FLUX": {
+    "label": "Paper: Flux-Stabilized Mana Grids (2022)",
+    "title": "Flux-Stabilized Mana Grids: A Field Study",
+    "year": 2022,
+    "citations": 214,
+    "note": "Breakthrough paper; spawned the experimental program responsible for the institute's largest lab expansion.",
+    "source": "Journal of Applied Thaumaturgy 14(2)"
+  },
+  "P-2024-COMMONS": {
+    "label": "Paper: Energy Commons Governance (2024)",
+    "title": "Energy Commons Governance at Research Institutes",
+    "year": 2024,
+    "citations": 38,
+    "note": "Analyses the institute's own consumption-vs-output trade-offs.",
+    "source": "Commons Review 9(1)"
+  }
+}

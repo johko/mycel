@@ -1,0 +1,41 @@
+{
+  "STAFF-2015-2019": {
+    "label": "Staffing history 2015-2019",
+    "period": "2015-2019",
+    "avg_research_staff": 38,
+    "avg_support_staff": 21,
+    "note": "Stable staffing; no major programs launched."
+  },
+  "STAFF-2020-2024": {
+    "label": "Staffing history 2020-2024",
+    "period": "2020-2024",
+    "avg_research_staff": 67,
+    "avg_support_staff": 24,
+    "note": "Research staff nearly doubled after the 2021 lab expansion."
+  },
+  "PERS-0042": {
+    "label": "Personnel file: head of Alchemy Lab",
+    "name": "Morgana Hexenmeister",
+    "date_of_birth": "1971-03-14",
+    "role": "Head of Alchemy Lab",
+    "hired": 2009,
+    "note": "Led the 2021 lab expansion and the 2022 flux research program."
+  },
+  "PERS-0107": {
+    "label": "Personnel file: chief archivist",
+    "name": "Bartholomew Quill",
+    "date_of_birth": "1958-11-02",
+    "role": "Chief Archivist",
+    "hired": 1989,
+    "note": "Maintains the institute's historical event register."
+  },
+  "EVENTS-2015-2024": {
+    "label": "Institutional events 2015-2024",
+    "period": "2015-2024",
+    "events": [
+      "2021: Alchemy Lab expansion completed",
+      "2022: Flux research program launched",
+      "2024: Second experimental wing opened"
+    ]
+  }
+}

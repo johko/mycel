@@ -1,0 +1,62 @@
+x-node: &node
+  build: .
+  environment: &node-env
+    HF_TOKEN: ${HF_TOKEN}
+    HF_PROVIDER: ${HF_PROVIDER:-auto}
+    NODE_MODEL: ${NODE_MODEL:-}
+    AUDIT_LOG_PATH: /var/log/diplomat/audit.log
+
+# Note: the static OPA image has no shell, so no wget/curl healthcheck is
+# possible. OPA starts near-instantly; plain depends_on ordering suffices.
+x-opa: &opa
+  image: openpolicyagent/opa:latest-static
+  command: ["run", "--server", "--addr=0.0.0.0:8181", "--watch", "/policies"]
+
+services:
+
+  energy-node:
+    <<: *node
+    ports: ["8001:8000"]
+    environment:
+      <<: *node-env
+      NODE_CONFIG: nodes/energy.yaml
+      OPA_URL: http://energy-opa:8181
+    volumes: ["energy-logs:/var/log/diplomat"]
+    depends_on: [energy-opa]
+
+  energy-opa:
+    <<: *opa
+    volumes: ["./opa/energy:/policies:ro"]
+
+  commons-node:
+    <<: *node
+    ports: ["8002:8000"]
+    environment:
+      <<: *node-env
+      NODE_CONFIG: nodes/commons.yaml
+      OPA_URL: http://commons-opa:8181
+    volumes: ["commons-logs:/var/log/diplomat"]
+    depends_on: [commons-opa]
+
+  commons-opa:
+    <<: *opa
+    volumes: ["./opa/commons:/policies:ro"]
+
+  archives-node:
+    <<: *node
+    ports: ["8003:8000"]
+    environment:
+      <<: *node-env
+      NODE_CONFIG: nodes/archives.yaml
+      OPA_URL: http://archives-opa:8181
+    volumes: ["archives-logs:/var/log/diplomat"]
+    depends_on: [archives-opa]
+
+  archives-opa:
+    <<: *opa
+    volumes: ["./opa/archives:/policies:ro"]
+
+volumes:
+  energy-logs:
+  commons-logs:
+  archives-logs:
