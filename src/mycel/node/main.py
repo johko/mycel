@@ -12,12 +12,26 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
-from mycel.node.agent import run_agent
+from mycel.node.agent import build_structured_answer, run_agent
 from mycel.node.config import NodeConfig, load_config
 from mycel.node.datastore import DataStore
 from mycel.node.mcp_server import build_mcp_server
 from mycel.node.policy import configure_audit_log, evaluate_policy, log_decision
-from mycel.schemas import InvokeRequest, InvokeResponse
+from mycel.schemas import InvokeRequest, InvokeResponse, PolicyDecision
+
+
+def _policy_caveats(decision: PolicyDecision) -> list[str]:
+    """Policy-imposed limitations on the answer, for the structured view."""
+    caveats: list[str] = []
+    if not decision.allowed:
+        caveats.append(
+            f"answer blocked by policy{f': {decision.reason}' if decision.reason else ''}"
+        )
+    for r in decision.redactions:
+        caveats.append(f"redacted by policy: {r.record}.{r.field}")
+    if decision.allowed and decision.reason:
+        caveats.append(decision.reason)
+    return caveats
 
 
 def create_app(config: NodeConfig | None = None) -> FastAPI:
@@ -55,8 +69,19 @@ def create_app(config: NodeConfig | None = None) -> FastAPI:
             ) from exc
 
         log_decision(request.query, decision)
+
+        structured = await build_structured_answer(
+            safe_answer,
+            list(raw.get("records", {}).keys()),
+            _policy_caveats(decision),
+            config,
+        )
+
         return InvokeResponse(
-            node_id=config.id, answer=safe_answer, policy_decision=decision
+            node_id=config.id,
+            answer=safe_answer,
+            structured_answer=structured,
+            policy_decision=decision,
         )
 
     return app

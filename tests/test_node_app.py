@@ -42,6 +42,47 @@ async def test_invoke_routes_through_policy(node_config, monkeypatch):
 
 
 @respx.mock
+async def test_invoke_includes_structured_answer(node_config, monkeypatch):
+    async def fake_agent(query, config, store):
+        return {"answer": "raw", "records": {"R1": store.get_record("R1")}}
+
+    async def fake_structured(answer, record_ids, caveats, config):
+        from mycel.schemas import Fact, StructuredAnswer
+
+        return StructuredAnswer(
+            facts=[Fact(claim="R2 is 7", value=7, source_record="R2")],
+            summary=answer,
+            caveats=caveats,
+        )
+
+    monkeypatch.setattr("mycel.node.main.run_agent", fake_agent)
+    monkeypatch.setattr("mycel.node.main.build_structured_answer", fake_structured)
+    respx.post("http://opa.test/v1/data/diplomat/result").mock(
+        return_value=Response(
+            200,
+            json={
+                "result": {
+                    "allow": True,
+                    "answer": "R2 is 7.",
+                    "obligations": ["cite Commons Scholars"],
+                }
+            },
+        )
+    )
+
+    app = create_app(node_config)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/invoke", json={"query": "what is R2?"})
+
+    body = resp.json()
+    assert body["answer"] == "R2 is 7."
+    assert body["structured_answer"]["summary"] == "R2 is 7."
+    assert body["structured_answer"]["facts"][0]["value"] == 7
+    assert body["structured_answer"]["facts"][0]["source_record"] == "R2"
+
+
+@respx.mock
 async def test_health(node_config):
     app = create_app(node_config)
     transport = httpx.ASGITransport(app=app)
