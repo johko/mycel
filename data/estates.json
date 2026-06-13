@@ -1,0 +1,30 @@
+{
+  "EST-CONSUMPTION-2020-2024": {
+    "label": "Campus metered consumption 2020-2024 (Estates building meters)",
+    "period": "2020-2024",
+    "total_kwh": 3050000,
+    "avg_annual_kwh": 610000,
+    "note": "Independent building-meter totals; differ slightly from the grid-side Energy Wizards figures because of metering boundaries.",
+    "source": "MICE Estates Meter Logs 2020-2024"
+  },
+  "EST-CONSUMPTION-2015-2019": {
+    "label": "Campus metered consumption 2015-2019 (Estates building meters)",
+    "period": "2015-2019",
+    "total_kwh": 2180000,
+    "avg_annual_kwh": 436000,
+    "source": "MICE Estates Meter Logs 2015-2019"
+  },
+  "EST-FLOORSPACE": {
+    "label": "Research floorspace and lab expansion record",
+    "research_floorspace_m2_2024": 14200,
+    "research_floorspace_m2_2019": 8600,
+    "note": "Research floorspace grew ~65% after the 2021 Alchemy Lab expansion and the 2024 second experimental wing.",
+    "source": "MICE Estates Space Register"
+  },
+  "EST-DRIVER": {
+    "label": "Consumption growth driver assessment",
+    "claim": "Campus energy consumption growth from 2020 is driven primarily by research lab expansion",
+    "assessment": true,
+    "source": "MICE Estates Annual Facilities Review 2024"
+  }
+}

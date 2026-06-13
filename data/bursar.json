@@ -1,0 +1,31 @@
+{
+  "BUR-STAFF-2020-2024": {
+    "label": "Funded research staff 2020-2024 (payroll)",
+    "period": "2020-2024",
+    "avg_research_staff": 64,
+    "avg_support_staff": 25,
+    "note": "Headcount funded through payroll; differs slightly from the Archivists' staffing history, which counts all affiliated researchers.",
+    "source": "MICE Bursar Payroll Summary 2020-2024"
+  },
+  "BUR-ENERGY-SPEND-2020-2024": {
+    "label": "Energy expenditure 2020-2024 and consumption estimate",
+    "period": "2020-2024",
+    "energy_spend_gp": 1240000,
+    "estimated_total_kwh": 3200000,
+    "note": "Consumption estimated from energy spend at contracted tariffs; an accounting estimate, not a meter reading.",
+    "source": "MICE Bursar Energy Accounts 2020-2024"
+  },
+  "BUR-PROGRAMS": {
+    "label": "Funded experimental programs 2020-2024",
+    "period": "2020-2024",
+    "programs_launched": 2,
+    "note": "Two major experimental programs funded: the 2022 flux research program and the 2024 second experimental wing.",
+    "source": "MICE Bursar Grant Ledger"
+  },
+  "BUR-DRIVER": {
+    "label": "Consumption growth driver assessment",
+    "claim": "Campus energy consumption growth from 2020 is driven primarily by research lab expansion",
+    "assessment": true,
+    "source": "MICE Bursar Budget Commentary 2024"
+  }
+}

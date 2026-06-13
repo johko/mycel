@@ -23,3 +23,24 @@ nodes:
       MICE. Personal names and dates of birth are redacted by policy.
     endpoint: http://localhost:8003
     policy_mode: redact
+
+  - id: estates-keepers
+    title: Estates & Facilities
+    description: >
+      Buildings, floorspace, and building-meter energy readings of MICE.
+      Holds an independent metered estimate of campus energy consumption
+      (overlaps the Energy Wizards' grid figures) plus lab-expansion
+      history. Open data; attribution required.
+    endpoint: http://localhost:8004
+    policy_mode: oblige
+
+  - id: bursar-office
+    title: Office of the Bursar
+    description: >
+      Budgets, payroll, and expenditure of MICE. Holds funded
+      research-staff headcounts (overlaps the Archivists' staffing
+      history) and an energy-spend-based estimate of campus consumption
+      (overlaps the Energy Wizards' figures). Open data; attribution
+      required.
+    endpoint: http://localhost:8005
+    policy_mode: oblige

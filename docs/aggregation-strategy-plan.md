@@ -156,23 +156,29 @@ clustering is unavailable: normalized-string grouping of `claim`.)
 
 ### Strategy 1 — `JudgmentAggregationStrategy` (`strategies/judgment.py`), name `"judgment"`
 
-Proposition-wise majority rule from judgment aggregation theory.
+Proposition-wise majority rule from judgment aggregation theory, scoped
+**per issue**.
 
 1. Run `align_claims` → node × issue matrix.
-2. For each issue, count the nodes asserting it. Accept the issue collectively
-   iff a majority assert it — optionally **confidence-weighted**, so a node's
-   vote carries weight ∝ its `confidence` and the threshold is ½·∑weights.
-3. **Discursive-dilemma detection:** when proposition-wise majority accepts a
-   set of issues that are mutually inconsistent (nodes agree on premises but
-   the majority-accepted conclusion contradicts them), flag it in
-   `AggregatedResult.conflicts` instead of silently picking one. This is the
-   signature pathology judgment aggregation studies.
-4. Build `node_attribution` (which nodes backed each accepted issue) and run a
-   short LLM prose pass over the accepted set.
+2. For each issue, the electorate is **only the nodes that opined on it** — a
+   node silent on a topic does not count against it. Group those voters by the
+   value they reported and find the value with the most support (optionally
+   **confidence-weighted**, so a vote carries weight ∝ its `confidence`).
+3. **Accept** the issue with the winning value iff that value commands a strict
+   majority of the issue's voters (support > ½·∑weights). Record any dissenting
+   value in `AggregatedResult.conflicts`.
+4. **Contested:** if no value reaches a majority (e.g. three nodes give three
+   different figures), do not pick one — surface the split in `conflicts` and
+   leave it out of the accepted set. (Picking a central value is the `median`
+   strategy's job; judgment reports what the federation does and does not
+   collectively affirm.) This per-issue value split is our pragmatic, honest
+   stand-in for the discursive dilemma, which we cannot detect in full without
+   an explicit logical-constraint model.
+5. Build `node_attribution` (every voter per issue) and run a short LLM prose
+   pass over the accepted + contested sets.
 
 Best for: discrete / boolean claims where you want the federation's collective
-position *and* an honest signal when that collective position is logically
-incoherent.
+position *and* an honest signal when the nodes that opined cannot agree.
 
 ### Strategy 2 — `MajorityJudgmentStrategy` (`strategies/majority_judgment.py`), name `"median"`
 

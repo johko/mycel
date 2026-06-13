@@ -67,7 +67,13 @@ through queries, and each node decides what leaves its environment.
 Available nodes:
 {registry}
 
-Plan the minimal set of node calls needed to answer the user's question.
+Plan the node calls needed to answer the user's question. Prefer a minimal
+plan, with one exception: when several departments may hold the same or
+corroborating data for a factual or quantitative claim, query EACH of them
+with the same question. Their answers are cross-checked and aggregated
+downstream, so overlapping coverage on a shared fact is valuable, not
+wasteful — e.g. a campus-wide figure that more than one department measures
+or estimates should be asked of every such department.
 Forward the user's actual information need verbatim where possible — do
 NOT pre-sanitize, soften, or rephrase a query to fit a node's policies.
 Policy decisions belong to the nodes, not to you: never refuse, never

@@ -6,15 +6,21 @@ only **policy-filtered** outputs with a central orchestrator. Sensitive data
 never leaves its environment; only governed responses do.
 
 ```
-                 ORCHESTRATOR  (registry → planner LLM → synthesizer)
+            ORCHESTRATOR  (registry → planner LLM → aggregation strategy)
                        │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-  Energy Wizards  Commons Scholars  Archivists
-  [OPA: DENY]     [OPA: OBLIGE]     [OPA: REDACT]
-  raw values      attribution       names & DOBs
-  never leave     required          never leave
+   ┌───────────┬───────┼───────────┬───────────┐
+   ▼           ▼       ▼           ▼           ▼
+ Energy     Commons  Archivists  Estates     Bursar
+ Wizards    Scholars             & Facilities Office
+ [DENY]     [OBLIGE] [REDACT]    [OBLIGE]     [OBLIGE]
+ raw vals   attrib.  names/DOBs  meter kWh    payroll/spend
+ never      required never leave (overlaps    (overlaps
+ leave                            Energy)      Energy+Archives)
 ```
+
+The orchestrator's aggregation strategy is pluggable (`llm` synthesis by
+default, or the `judgment` / `median` computational-social-choice strategies
+that vote across the overlapping nodes).
 
 Each Diplomat node is the same codebase configured by a YAML file
 ([nodes/](nodes/)), backed by its own data store ([data/](data/)) and an OPA
@@ -24,7 +30,7 @@ so a value the LLM read can't slip out through prose.
 
 ## Demo scenario: MICE
 
-The *Magical Institute for Commons and Energy* has three departments, each run
+The *Magical Institute for Commons and Energy* has five departments, each run
 by a Jealous Wizard with their own policy:
 
 | Department | Data | Policy mode |
@@ -32,6 +38,14 @@ by a Jealous Wizard with their own policy:
 | Energy Wizards | consumption records | **deny** — raw values blocked, aggregates only |
 | Commons Scholars | papers, datasets | **oblige** — open, but attribution required |
 | Archivists | history, personnel files | **redact** — names & birth dates replaced |
+| Estates & Facilities | building meters, floorspace | **oblige** — *overlaps Energy's consumption figures* |
+| Office of the Bursar | payroll, budgets | **oblige** — *overlaps Energy & Archivists' figures* |
+
+The last two departments deliberately hold **overlapping** facts: three
+departments carry a campus-consumption figure for 2020–2024 and two carry a
+research-staff headcount. When the planner fans a question to several of them,
+the `judgment` and `median` aggregation strategies have something to actually
+vote on (see [docs/comsoc-overlap-prerequisite.md](docs/comsoc-overlap-prerequisite.md)).
 
 ## Quickstart
 

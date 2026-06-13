@@ -1,7 +1,19 @@
 # Known limitation — COMSOC strategies need overlapping node queries
 
-**Status:** open · tracked for a future planner change
+**Status:** addressed via overlapping-data nodes (option 3) · planner fan-out still optional
 **Affects:** the `judgment` and `median` aggregation strategies (Phase 3)
+
+> **Update.** Two overlapping-content nodes were added — **Estates & Facilities**
+> and **Office of the Bursar** (both `oblige`, so their figures actually leave
+> the node and can be aggregated). Three departments now carry a 2020–2024
+> campus-consumption figure (Energy 3.14M kWh, Estates 3.05M, Bursar 3.20M) and
+> two carry a research-staff headcount (Archivists 67, Bursar 64), plus a shared
+> boolean claim ("lab expansion drove the growth"). Their registry descriptions
+> advertise the overlap so the planner routes cross-cutting questions to several
+> of them — no planner code change required. The `median` and `judgment`
+> strategies are now demonstrable on the live demo (see `scripts/demo.sh` steps
+> 5–6). The fan-out options below remain valid if you later want to *force*
+> overlap rather than rely on the planner choosing it.
 
 ## The issue
 

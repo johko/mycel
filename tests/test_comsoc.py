@@ -212,40 +212,89 @@ def _patch_align(monkeypatch, module, issues):
     monkeypatch.setattr(module, "align_claims", fake_align)
 
 
-async def test_judgment_accepts_majority_and_flags_conflict(monkeypatch, no_prose):
+async def test_judgment_accepts_majority_value_and_flags_dissent(monkeypatch, no_prose):
+    # 3 voters on one issue: two agree on "12%", one dissents with "20%"
     issues = [
-        # 3 voters; "rose" asserted by a+b (majority), with disagreeing values
         Issue(
             label="energy rose",
-            positions=[_pos("a", "rose", value="12%", confidence=1.0), _pos("b", "rose", value="20%", confidence=1.0)],
-        ),
-        # only c asserts -> minority, rejected
-        Issue(label="papers up", positions=[_pos("c", "papers up", value=5, confidence=1.0)]),
+            positions=[
+                _pos("a", "rose", value="12%", confidence=1.0),
+                _pos("b", "rose", value="12%", confidence=1.0),
+                _pos("c", "rose", value="20%", confidence=1.0),
+            ],
+        )
     ]
     _patch_align(monkeypatch, judgment, issues)
 
     result = await JudgmentAggregationStrategy("m").aggregate("q", [])
 
     assert result.summary == "PROSE"
-    assert [f["issue"] for f in result.facts] == ["energy rose"]
-    assert result.node_attribution["energy rose"] == ["a", "b"]
+    assert result.facts == [
+        {"issue": "energy rose", "value": "12%", "supporters": ["a", "b"]}
+    ]
+    assert result.node_attribution["energy rose"] == ["a", "b", "c"]
+    # majority won but the dissent is recorded
     assert len(result.conflicts) == 1
-    assert result.conflicts[0]["issue"] == "energy rose"
+    assert result.conflicts[0]["decided"] == "12%"
+    assert result.conflicts[0]["positions"] == {"a": "12%", "b": "12%", "c": "20%"}
 
 
-async def test_judgment_rejects_when_no_majority(monkeypatch, no_prose):
-    # 3 voters across issues, but each issue has only 1 supporter -> none accepted
+async def test_judgment_contested_when_no_majority_value(monkeypatch, no_prose):
+    # 3 voters, 3 distinct values -> no majority -> contested, nothing accepted
     issues = [
-        Issue(label="i1", positions=[_pos("a", "i1", confidence=1.0)]),
-        Issue(label="i2", positions=[_pos("b", "i2", confidence=1.0)]),
-        Issue(label="i3", positions=[_pos("c", "i3", confidence=1.0)]),
+        Issue(
+            label="consumption",
+            positions=[
+                _pos("a", "c", value=100, confidence=1.0),
+                _pos("b", "c", value=200, confidence=1.0),
+                _pos("c", "c", value=300, confidence=1.0),
+            ],
+        )
     ]
     _patch_align(monkeypatch, judgment, issues)
 
     result = await JudgmentAggregationStrategy("m").aggregate("q", [])
 
     assert result.facts == []
+    assert len(result.conflicts) == 1
+    assert result.conflicts[0]["decided"] is None
+    assert result.conflicts[0]["positions"] == {"a": 100, "b": 200, "c": 300}
+
+
+async def test_judgment_lone_voter_is_accepted(monkeypatch, no_prose):
+    # only the nodes that opined vote: a single uncontested voter carries it
+    issues = [Issue(label="solo", positions=[_pos("a", "solo", value=7, confidence=1.0)])]
+    _patch_align(monkeypatch, judgment, issues)
+
+    result = await JudgmentAggregationStrategy("m").aggregate("q", [])
+
+    assert result.facts == [{"issue": "solo", "value": 7, "supporters": ["a"]}]
     assert result.conflicts == []
+
+
+async def test_judgment_confidence_weight_breaks_tie(monkeypatch, no_prose):
+    # two distinct values, equal count, but one voter is more confident -> wins
+    issues = [
+        Issue(
+            label="staff",
+            positions=[
+                _pos("archives", "staff", value=67, confidence=0.9),
+                _pos("bursar", "staff", value=64, confidence=0.5),
+            ],
+        )
+    ]
+    _patch_align(monkeypatch, judgment, issues)
+
+    result = await JudgmentAggregationStrategy("m").aggregate("q", [])
+
+    assert result.facts == [
+        {"issue": "staff", "value": 67, "supporters": ["archives"]}
+    ]
+    # unweighted, the same split is a tie -> contested
+    unweighted = await JudgmentAggregationStrategy(
+        "m", confidence_weighted=False
+    ).aggregate("q", [])
+    assert unweighted.facts == []
 
 
 async def test_median_computes_weighted_median_and_spread(monkeypatch, no_prose):
