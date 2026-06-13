@@ -18,17 +18,21 @@ from fastapi.responses import FileResponse, StreamingResponse
 from mycel.orchestrator.graph import NODE_TIMEOUT, _invoke_node, _result_event, build_graph
 from mycel.orchestrator.planner import DEFAULT_MODEL, PlannedCall
 from mycel.orchestrator.registry import load_registry
+from mycel.orchestrator.strategies import DEFAULT_STRATEGY, make_strategy
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
 def create_app(
-    registry_path: str | None = None, model: str = DEFAULT_MODEL
+    registry_path: str | None = None,
+    model: str = DEFAULT_MODEL,
+    strategy: str | None = None,
 ) -> FastAPI:
     registry = load_registry(
         registry_path or os.environ.get("REGISTRY_PATH", "registry.yaml")
     )
-    graph = build_graph(registry, model)
+    strategy_name = strategy or os.environ.get("MYCEL_STRATEGY", DEFAULT_STRATEGY)
+    graph = build_graph(registry, model, make_strategy(strategy_name, model))
 
     app = FastAPI(title="Mycel — MICE Federation UI")
 

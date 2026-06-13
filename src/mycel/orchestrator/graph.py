@@ -15,10 +15,10 @@ import httpx
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
-from mycel.llm import chat_with_retry, get_client
 from mycel.orchestrator.planner import DEFAULT_MODEL, PlannedCall, make_plan
 from mycel.orchestrator.registry import Registry
-from mycel.schemas import InvokeResponse, PolicyDecision
+from mycel.orchestrator.strategies import AggregationStrategy, make_strategy
+from mycel.schemas import InvokeResponse
 
 NODE_TIMEOUT = float(os.environ.get("NODE_TIMEOUT", "120"))
 
@@ -34,20 +34,6 @@ class OrchestratorState(TypedDict, total=False):
     plan: list[PlannedCall]
     results: list[NodeResult]
     final_answer: str
-
-
-_SYNTH_SYSTEM_PROMPT = """\
-You are the synthesizer of a federated multi-agent system. You receive
-policy-filtered responses from autonomous department nodes and combine
-them into one answer to the user's question.
-
-Rules:
-- Use only what the nodes returned; do not invent data.
-- Honor every attribution obligation: cite the listed sources.
-- Where a node blocked or redacted information, say so explicitly —
-  the policy enforcement is a feature, not a failure to hide.
-- Be concise and structured.\
-"""
 
 
 _NODE_ATTEMPTS = 3
@@ -83,36 +69,13 @@ def _result_event(result: NodeResult) -> dict:
     }
 
 
-def _describe_decision(decision: PolicyDecision) -> str:
-    parts = [f"allowed={decision.allowed}"]
-    if decision.reason:
-        parts.append(f"reason: {decision.reason}")
-    if decision.redactions:
-        fields = ", ".join(f"{r.record}.{r.field}" for r in decision.redactions)
-        parts.append(f"redacted: {fields}")
-    if decision.obligations:
-        parts.append("obligations: " + "; ".join(decision.obligations))
-    return ", ".join(parts)
+def build_graph(
+    registry: Registry,
+    model: str = DEFAULT_MODEL,
+    strategy: AggregationStrategy | None = None,
+):
+    strategy = strategy or make_strategy(model=model)
 
-
-def _format_results(results: list[NodeResult]) -> str:
-    sections = []
-    for result in results:
-        call = result["call"]
-        if result["error"] is not None:
-            sections.append(f"## {call.node_id}\nNode unreachable: {result['error']}")
-            continue
-        response = result["response"]
-        sections.append(
-            f"## {call.node_id}\n"
-            f"Query: {call.query}\n"
-            f"Policy decision: {_describe_decision(response.policy_decision)}\n"
-            f"Answer: {response.answer or '(blocked by policy)'}"
-        )
-    return "\n\n".join(sections)
-
-
-def build_graph(registry: Registry, model: str = DEFAULT_MODEL):
     async def plan_node(state: OrchestratorState) -> OrchestratorState:
         plan = await make_plan(state["question"], registry, model)
         writer = get_stream_writer()
@@ -136,24 +99,10 @@ def build_graph(registry: Registry, model: str = DEFAULT_MODEL):
 
     async def synthesize_node(state: OrchestratorState) -> OrchestratorState:
         writer = get_stream_writer()
-        writer({"type": "synthesizing"})
-        client = get_client()
-        prompt = (
-            f"Question: {state['question']}\n\n"
-            f"Node responses:\n\n{_format_results(state['results'])}"
-        )
-        response = await chat_with_retry(
-            client,
-            messages=[
-                {"role": "system", "content": _SYNTH_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            model=model,
-            max_tokens=2048,
-        )
-        answer = response.choices[0].message.content or ""
-        writer({"type": "final", "answer": answer})
-        return {"final_answer": answer}
+        writer({"type": "synthesizing", "strategy": strategy.name})
+        aggregated = await strategy.aggregate(state["question"], state["results"])
+        writer({"type": "final", "answer": aggregated.summary})
+        return {"final_answer": aggregated.summary}
 
     graph = StateGraph(OrchestratorState)
     graph.add_node("plan", plan_node)

@@ -16,6 +16,11 @@ from dotenv import load_dotenv
 from mycel.orchestrator.graph import build_graph
 from mycel.orchestrator.planner import DEFAULT_MODEL
 from mycel.orchestrator.registry import load_registry
+from mycel.orchestrator.strategies import (
+    DEFAULT_STRATEGY,
+    STRATEGY_REGISTRY,
+    make_strategy,
+)
 
 _RULE = "─" * 72
 
@@ -52,9 +57,9 @@ def _print_results(results) -> None:
             print(f"  answer: {response.answer}")
 
 
-async def ask(question: str, registry_path: str, model: str) -> None:
+async def ask(question: str, registry_path: str, model: str, strategy: str) -> None:
     registry = load_registry(registry_path)
-    graph = build_graph(registry, model)
+    graph = build_graph(registry, model, make_strategy(strategy, model))
 
     async for update in graph.astream({"question": question}, stream_mode="updates"):
         if "plan" in update:
@@ -72,5 +77,11 @@ def main() -> None:
     parser.add_argument("question")
     parser.add_argument("--registry", default="registry.yaml")
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--strategy",
+        default=DEFAULT_STRATEGY,
+        choices=sorted(STRATEGY_REGISTRY),
+        help="aggregation strategy for combining node responses",
+    )
     args = parser.parse_args()
-    asyncio.run(ask(args.question, args.registry, args.model))
+    asyncio.run(ask(args.question, args.registry, args.model, args.strategy))

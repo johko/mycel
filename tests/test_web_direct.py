@@ -23,7 +23,7 @@ nodes:
 def client(tmp_path, monkeypatch):
     registry_path = tmp_path / "registry.yaml"
     registry_path.write_text(REGISTRY_YAML)
-    monkeypatch.setattr(web, "build_graph", lambda registry, model: None)
+    monkeypatch.setattr(web, "build_graph", lambda *args, **kwargs: None)
     app = web.create_app(registry_path=str(registry_path))
     transport = httpx.ASGITransport(app=app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
