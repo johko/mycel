@@ -6,6 +6,7 @@ nodes:
       Returns aggregates and trends only; raw consumption values are
       blocked by policy.
     endpoint: http://localhost:8001
+    policy_mode: deny
 
   - id: commons-scholars
     title: Commons Scholars
@@ -13,6 +14,7 @@ nodes:
       Public research papers, datasets, and publication statistics of
       MICE. Open data; answers carry an attribution obligation.
     endpoint: http://localhost:8002
+    policy_mode: oblige
 
   - id: archivists
     title: Archivists
@@ -20,3 +22,4 @@ nodes:
       Historical records, staffing history, and institutional events of
       MICE. Personal names and dates of birth are redacted by policy.
     endpoint: http://localhost:8003
+    policy_mode: redact

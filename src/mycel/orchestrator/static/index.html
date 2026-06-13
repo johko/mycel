@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MICE — Federated Multi-Agent System</title>
+<style>
+  :root {
+    --bg: #0b0e1a;
+    --panel: #12172b;
+    --panel-2: #181f38;
+    --line: #2a3354;
+    --text: #e6e9f5;
+    --muted: #8b93b8;
+    --gold: #d4a843;
+    --energy: #f59e0b;
+    --commons: #34d399;
+    --archives: #818cf8;
+    --blocked: #ef4444;
+    --allowed: #22c55e;
+    --redacted: #f59e0b;
+    --obliged: #38bdf8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 500px at 50% -10%, #1b2247 0%, transparent 60%),
+      radial-gradient(800px 400px at 85% 100%, #14203a 0%, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  header { text-align: center; margin-bottom: 26px; }
+  header h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: .5px;
+    background: linear-gradient(90deg, #f5e6bf, var(--gold), #f5e6bf);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p { margin: 6px 0 0; color: var(--muted); }
+  header p b { color: var(--text); font-weight: 600; }
+
+  .askbar { display: flex; gap: 10px; margin: 0 auto 12px; max-width: 860px; }
+  .askbar input {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--text);
+    padding: 13px 16px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .askbar input:focus { border-color: var(--gold); }
+  .askbar button {
+    background: linear-gradient(135deg, var(--gold), #a87f2c);
+    border: none;
+    border-radius: 12px;
+    color: #1a1405;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 0 26px;
+    cursor: pointer;
+    transition: filter .15s, transform .05s;
+  }
+  .askbar button:hover { filter: brightness(1.12); }
+  .askbar button:active { transform: scale(.98); }
+  .askbar button:disabled { filter: grayscale(.7) brightness(.8); cursor: wait; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 30px; }
+  .chip {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .chip:hover { color: var(--text); border-color: var(--gold); }
+
+  /* federation map */
+  #map { position: relative; }
+  #wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  #wires path { fill: none; stroke: var(--line); stroke-width: 2; transition: stroke .3s; }
+  #wires path.active {
+    stroke: var(--gold);
+    stroke-dasharray: 7 7;
+    animation: flow .6s linear infinite;
+    filter: drop-shadow(0 0 4px rgba(212,168,67,.6));
+  }
+  @keyframes flow { to { stroke-dashoffset: -14; } }
+
+  .card {
+    position: relative;
+    z-index: 1;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px 18px;
+    transition: border-color .25s, box-shadow .25s;
+  }
+
+  #orch { max-width: 560px; margin: 0 auto 64px; text-align: center; }
+  #orch h2 { margin: 0 0 2px; font-size: 17px; color: var(--gold); letter-spacing: 1px; }
+  .phases { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; font-size: 12.5px; color: var(--muted); }
+  .phase { padding: 3px 12px; border-radius: 999px; border: 1px solid transparent; }
+  .phase.on {
+    color: var(--gold);
+    border-color: var(--gold);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .phase.done { color: var(--allowed); }
+  @keyframes pulse { 50% { opacity: .55; } }
+  #planlist { text-align: left; margin: 10px 0 0; padding: 0; list-style: none; font-size: 13.5px; display: none; }
+  #planlist li { padding: 7px 10px; border-top: 1px solid var(--line); color: var(--muted); }
+  #planlist li:first-child { border-top: none; }
+  #planlist b { color: var(--text); }
+
+  #nodes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  @media (max-width: 900px) { #nodes { grid-template-columns: 1fr; } #wires { display: none; } }
+
+  .node .head { display: flex; align-items: center; gap: 10px; }
+  .node .icon { font-size: 26px; }
+  .node h3 { margin: 0; font-size: 16px; }
+  .node .mode {
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid;
+  }
+  .mode.deny { color: var(--blocked); border-color: var(--blocked); }
+  .mode.redact { color: var(--redacted); border-color: var(--redacted); }
+  .mode.oblige { color: var(--obliged); border-color: var(--obliged); }
+  .node .desc { color: var(--muted); font-size: 13px; margin: 8px 0 0; min-height: 56px; }
+  .node .direct {
+    margin-top: 10px;
+    background: none;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .node .direct:hover { color: var(--gold); border-color: var(--gold); }
+  .node .direct:disabled { opacity: .4; cursor: wait; }
+
+  .node.active { border-color: var(--gold); box-shadow: 0 0 22px rgba(212,168,67,.18); }
+  .node.verdict-blocked { border-color: var(--blocked); box-shadow: 0 0 22px rgba(239,68,68,.15); }
+  .node.verdict-allowed { border-color: var(--allowed); box-shadow: 0 0 22px rgba(34,197,94,.12); }
+
+  .node .live { margin-top: 12px; display: none; }
+  .node .query { font-size: 12.5px; color: var(--muted); font-style: italic; border-left: 2px solid var(--line); padding-left: 9px; }
+  .node .working { display: none; align-items: center; gap: 8px; color: var(--gold); font-size: 13px; margin-top: 10px; }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--line);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .stamp {
+    display: none;
+    margin-top: 12px;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 2px;
+    padding: 5px 12px;
+    border: 2px solid;
+    border-radius: 8px;
+    width: fit-content;
+    transform: rotate(-2deg);
+    animation: stamp .25s cubic-bezier(.2, 2.2, .6, 1) both;
+  }
+  @keyframes stamp { from { transform: scale(2.2) rotate(-9deg); opacity: 0; } to { transform: scale(1) rotate(-2deg); opacity: 1; } }
+  .stamp.blocked { color: var(--blocked); border-color: var(--blocked); background: rgba(239,68,68,.08); }
+  .stamp.allowed { color: var(--allowed); border-color: var(--allowed); background: rgba(34,197,94,.08); }
+  .stamp.error { color: var(--muted); border-color: var(--muted); }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tag { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid; }
+  .tag.violation { color: var(--blocked); border-color: var(--blocked); }
+  .tag.redaction { color: var(--redacted); border-color: var(--redacted); }
+  .tag.obligation { color: var(--obliged); border-color: var(--obliged); }
+
+  .node .answer {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #c6cce6;
+    background: var(--panel-2);
+    border-radius: 10px;
+    padding: 10px 12px;
+    max-height: 240px;
+    overflow: auto;
+    display: none;
+  }
+
+  .redacted-box {
+    background: #000;
+    color: #000;
+    border-radius: 3px;
+    padding: 0 6px;
+    text-shadow: none;
+    user-select: none;
+    position: relative;
+  }
+  .redacted-box::after {
+    content: "REDACTED";
+    color: var(--redacted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #final {
+    margin-top: 30px;
+    display: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 34px rgba(212,168,67,.14);
+    animation: rise .4s ease both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+  #final h2 { margin: 0 0 10px; color: var(--gold); font-size: 15px; letter-spacing: 2px; }
+  #final .md { font-size: 14.5px; }
+  .md h1, .md h2, .md h3 { color: var(--text); margin: 14px 0 6px; }
+  .md p { margin: 8px 0; }
+  .md ul { margin: 6px 0; padding-left: 22px; }
+  .md code { background: var(--panel-2); border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+  .md em { color: var(--muted); }
+
+  #errbar {
+    display: none;
+    margin-top: 18px;
+    border: 1px solid var(--blocked);
+    color: var(--blocked);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13.5px;
+  }
+  footer { margin-top: 46px; text-align: center; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🧙 MICE — Magical Institute for Commons and Energy</h1>
+    <p>A <b>Federated Multi-Agent System</b> — every answer leaves its department only through the Jealous Wizard's policy.</p>
+  </header>
+
+  <div class="askbar">
+    <input id="q" placeholder="Ask the federation a question…" autocomplete="off">
+    <button id="go">Ask ✦</button>
+  </div>
+  <div class="chips" id="chips"></div>
+
+  <div id="map">
+    <svg id="wires"></svg>
+    <div class="card" id="orch">
+      <h2>ORCHESTRATOR</h2>
+      <div class="phases">
+        <span class="phase" id="ph-plan">plan</span>
+        <span class="phase" id="ph-exec">execute</span>
+        <span class="phase" id="ph-synth">synthesize</span>
+      </div>
+      <ul id="planlist"></ul>
+    </div>
+    <div id="nodes"></div>
+  </div>
+
+  <div class="card" id="final">
+    <h2>✦ SYNTHESIZED ANSWER</h2>
+    <div class="md" id="finalmd"></div>
+  </div>
+  <div id="errbar"></div>
+
+  <footer>Mycel · Diplomat Agents in Docker · Open Policy Agent sidecars · inference by Hugging Face Inference Providers</footer>
+</div>
+
+<script>
+const ICONS = { "energy-wizards": "⚡", "commons-scholars": "📜", "archivists": "🗄️" };
+const EXAMPLES = [
+  "What exactly was Tower A's energy consumption in 2024, in kWh?",
+  "Who is the head of the Alchemy Lab and when were they born?",
+  "How many papers did MICE publish between 2020 and 2024?",
+  "What is the relationship between energy consumption patterns and research output at MICE over the last decade?",
+];
+
+const $ = (id) => document.getElementById(id);
+let source = null;
+
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// minimal offline markdown: headers, bold, italics, code, bullets, [REDACTED]
+function md(text) {
+  const blocks = esc(text).split(/\n{2,}/).map((block) => {
+    const lines = block.split("\n");
+    if (lines.every((l) => /^\s*[-•]\s+/.test(l))) {
+      return "<ul>" + lines.map((l) => "<li>" + l.replace(/^\s*[-•]\s+/, "") + "</li>").join("") + "</ul>";
+    }
+    const h = block.match(/^(#{1,3})\s+(.*)$/m);
+    if (h && lines.length === 1) return `<h${h[1].length + 1}>${h[2]}</h${h[1].length + 1}>`;
+    return "<p>" + block.replace(/\n/g, "<br>") + "</p>";
+  }).join("");
+  return blocks
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    .replace(/\[REDACTED\]/g, '<span class="redacted-box">[REDACTED]</span>');
+}
+
+function nodeCard(n) {
+  const div = document.createElement("div");
+  div.className = "card node";
+  div.id = "node-" + n.id;
+  div.innerHTML = `
+    <div class="head">
+      <span class="icon">${ICONS[n.id] || "🔮"}</span>
+      <h3>${esc(n.title)}</h3>
+      ${n.policy_mode ? `<span class="mode ${n.policy_mode}">${n.policy_mode.toUpperCase()}</span>` : ""}
+    </div>
+    <p class="desc">${esc(n.description.trim())}</p>
+    <button class="direct" title="Skip the planner — send the question straight to this node">interrogate directly ↯</button>
+    <div class="live">
+      <div class="query"></div>
+      <div class="working"><div class="spinner"></div><span>diplomat negotiating…</span></div>
+      <div class="stamp"></div>
+      <div class="tags"></div>
+      <div class="answer"></div>
+    </div>`;
+  return div;
+}
+
+function drawWires(active) {
+  const svg = $("wires"), map = $("map"), orch = $("orch");
+  const mr = map.getBoundingClientRect(), or = orch.getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${mr.width} ${mr.height}`);
+  svg.innerHTML = "";
+  const x0 = or.left - mr.left + or.width / 2, y0 = or.bottom - mr.top;
+  document.querySelectorAll(".node").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    const x1 = r.left - mr.left + r.width / 2, y1 = r.top - mr.top;
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", `M ${x0} ${y0} C ${x0} ${y0 + 36}, ${x1} ${y1 - 36}, ${x1} ${y1}`);
+    if (el.id === "node-" + active) p.classList.add("active");
+    svg.appendChild(p);
+  });
+}
+
+function setPhase(phase) {
+  const order = ["plan", "exec", "synth"];
+  order.forEach((p, i) => {
+    const el = $("ph-" + p);
+    el.className = "phase" +
+      (p === phase ? " on" : order.indexOf(phase) > i || phase === "done" ? " done" : "");
+  });
+}
+
+function resetUI() {
+  $("planlist").style.display = "none";
+  $("planlist").innerHTML = "";
+  $("final").style.display = "none";
+  $("errbar").style.display = "none";
+  setPhase(null);
+  document.querySelectorAll(".node").forEach((el) => {
+    el.className = "card node";
+    el.querySelector(".live").style.display = "none";
+    el.querySelector(".working").style.display = "none";
+    el.querySelector(".stamp").style.display = "none";
+    el.querySelector(".answer").style.display = "none";
+    el.querySelector(".tags").innerHTML = "";
+  });
+  drawWires(null);
+}
+
+function handle(ev) {
+  if (ev.type === "plan") {
+    setPhase("exec");
+    const ul = $("planlist");
+    ul.style.display = "block";
+    ul.innerHTML = ev.calls.map((c, i) =>
+      `<li>${i + 1}. <b>${esc(c.node_id)}</b> — ${esc(c.query)}</li>`).join("");
+  } else if (ev.type === "node_start") {
+    const el = $("node-" + ev.node_id);
+    if (!el) return;
+    el.classList.add("active");
+    el.querySelector(".live").style.display = "block";
+    el.querySelector(".query").textContent = "“" + ev.query + "”";
+    el.querySelector(".working").style.display = "flex";
+    drawWires(ev.node_id);
+  } else if (ev.type === "node_result") {
+    const el = $("node-" + ev.node_id);
+    if (!el) return;
+    el.classList.remove("active");
+    el.querySelector(".working").style.display = "none";
+    const stamp = el.querySelector(".stamp"), tags = el.querySelector(".tags");
+    stamp.style.display = "block";
+    if (ev.error) {
+      stamp.className = "stamp error"; stamp.textContent = "UNREACHABLE";
+      tags.innerHTML = `<span class="tag violation">${esc(ev.error.slice(0, 120))}</span>`;
+    } else {
+      const d = ev.decision;
+      const blocked = !d.allowed;
+      stamp.className = "stamp " + (blocked ? "blocked" : "allowed");
+      stamp.textContent = blocked ? "⛔ BLOCKED" : "✓ ALLOWED";
+      el.classList.add(blocked ? "verdict-blocked" : "verdict-allowed");
+      tags.innerHTML =
+        d.violations.map((v) => `<span class="tag violation">⚠ ${esc(v.record)}.${esc(v.field)}</span>`).join("") +
+        d.redactions.map((r) => `<span class="tag redaction">✏ redacted ${esc(r.record)}.${esc(r.field)}</span>`).join("") +
+        d.obligations.map((o) => `<span class="tag obligation">⚖ ${esc(o)}</span>`).join("");
+      if (blocked && d.reason) {
+        tags.innerHTML += `<span class="tag violation">${esc(d.reason)}</span>`;
+      }
+      if (ev.answer) {
+        const a = el.querySelector(".answer");
+        a.style.display = "block";
+        a.innerHTML = md(ev.answer);
+      }
+    }
+    drawWires(null);
+  } else if (ev.type === "synthesizing") {
+    setPhase("synth");
+  } else if (ev.type === "final") {
+    setPhase("done");
+    $("final").style.display = "block";
+    $("finalmd").innerHTML = md(ev.answer);
+    $("final").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } else if (ev.type === "error") {
+    $("errbar").style.display = "block";
+    $("errbar").textContent = "✦ The federation faltered: " + ev.message;
+  }
+}
+
+function stream(url) {
+  resetUI();
+  $("go").disabled = true;
+  document.querySelectorAll(".direct").forEach((b) => (b.disabled = true));
+  source = new EventSource(url);
+  source.onmessage = (m) => {
+    const ev = JSON.parse(m.data);
+    if (ev.type === "done") { close(); return; }
+    handle(ev);
+  };
+  source.onerror = () => {
+    $("errbar").style.display = "block";
+    $("errbar").textContent = "✦ Lost connection to the orchestrator.";
+    close();
+  };
+  function close() {
+    source.close();
+    source = null;
+    $("go").disabled = false;
+    document.querySelectorAll(".direct").forEach((b) => (b.disabled = false));
+  }
+}
+
+function ask() {
+  const q = $("q").value.trim();
+  if (!q || source) return;
+  setPhase(null);
+  stream("/api/ask?question=" + encodeURIComponent(q));
+  setPhase("plan");
+}
+
+function askDirect(nodeId) {
+  const q = $("q").value.trim();
+  if (!q || source) return;
+  stream(`/api/direct?node_id=${encodeURIComponent(nodeId)}&question=${encodeURIComponent(q)}`);
+}
+
+async function init() {
+  const reg = await (await fetch("/api/registry")).json();
+  const grid = $("nodes");
+  reg.nodes.forEach((n) => {
+    const card = nodeCard(n);
+    card.querySelector(".direct").onclick = () => askDirect(n.id);
+    grid.appendChild(card);
+  });
+  EXAMPLES.forEach((ex) => {
+    const c = document.createElement("button");
+    c.className = "chip";
+    c.textContent = ex;
+    c.onclick = () => { $("q").value = ex; ask(); };
+    $("chips").appendChild(c);
+  });
+  $("go").onclick = ask;
+  $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
+  drawWires(null);
+  window.addEventListener("resize", () => drawWires(null));
+}
+init();
+</script>
+</body>
+</html>

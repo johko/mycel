@@ -44,17 +44,23 @@ through the HF router — any tool-calling open-weights model works
 ```bash
 cp .env.example .env          # add your HF_TOKEN
 docker compose up --build     # 3 nodes (:8001-:8003) + 3 OPA sidecars
-uv run mycel-ask "What is the relationship between energy consumption patterns and research output at MICE over the last decade?"
+uv run mycel-ui               # demo dashboard → http://localhost:7860
 ```
 
-The CLI prints the planner's call plan, each node's policy decision
-(allowed / blocked / redacted / obligations), and the synthesized answer.
+The web UI shows the federation live: the planner's call plan, queries
+flowing to the department nodes, policy verdicts stamped on each card
+(⛔ blocked / ✏ redacted / ⚖ attribution), and the synthesized answer.
+Each card also has an **"interrogate directly"** button that bypasses the
+planner and sends your question straight to one node — the most reliable
+way to watch OPA block a raw-value request.
 
-Try the policies directly:
+The same flow is available on the command line:
 
 ```bash
+uv run mycel-ask "What is the relationship between energy consumption patterns and research output at MICE over the last decade?"
 uv run mycel-ask "What exactly did Tower A consume in 2024?"   # → blocked
 uv run mycel-ask "Who runs the Alchemy Lab?"                   # → name redacted
+./scripts/demo.sh                                              # all demo queries
 ```
 
 ## Node API

@@ -16,6 +16,8 @@ class NodeEntry(BaseModel):
     title: str
     description: str
     endpoint: str
+    # display-only hint for UIs: "deny" | "redact" | "oblige"
+    policy_mode: str | None = None
 
 
 class Registry(BaseModel):
