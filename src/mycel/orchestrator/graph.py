@@ -7,10 +7,12 @@ policy-filtered responses — honoring obligations and surfacing what
 the policies blocked.
 """
 
+import asyncio
 import os
 from typing import TypedDict
 
 import httpx
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from mycel.llm import chat_with_retry, get_client
@@ -68,13 +70,17 @@ async def _invoke_node(
     return {"call": call, "response": None, "error": error}
 
 
-async def execute_plan(plan: list[PlannedCall], registry: Registry) -> list[NodeResult]:
-    results: list[NodeResult] = []
-    async with httpx.AsyncClient(timeout=NODE_TIMEOUT) as client:
-        for call in plan:
-            entry = registry.get(call.node_id)
-            results.append(await _invoke_node(client, entry.endpoint, call))
-    return results
+def _result_event(result: NodeResult) -> dict:
+    """Serializable per-node event for live UIs (custom stream channel)."""
+    response = result["response"]
+    return {
+        "type": "node_result",
+        "node_id": result["call"].node_id,
+        "query": result["call"].query,
+        "error": result["error"],
+        "answer": response.answer if response else None,
+        "decision": response.policy_decision.model_dump() if response else None,
+    }
 
 
 def _describe_decision(decision: PolicyDecision) -> str:
@@ -109,13 +115,28 @@ def _format_results(results: list[NodeResult]) -> str:
 def build_graph(registry: Registry, model: str = DEFAULT_MODEL):
     async def plan_node(state: OrchestratorState) -> OrchestratorState:
         plan = await make_plan(state["question"], registry, model)
+        writer = get_stream_writer()
+        writer({"type": "plan", "calls": [c.model_dump() for c in plan]})
         return {"plan": plan}
 
     async def execute_node(state: OrchestratorState) -> OrchestratorState:
-        results = await execute_plan(state["plan"], registry)
-        return {"results": results}
+        writer = get_stream_writer()
+        for call in state["plan"]:
+            writer({"type": "node_start", "node_id": call.node_id, "query": call.query})
+
+        async def invoke_and_emit(call: PlannedCall) -> NodeResult:
+            entry = registry.get(call.node_id)
+            async with httpx.AsyncClient(timeout=NODE_TIMEOUT) as client:
+                result = await _invoke_node(client, entry.endpoint, call)
+            writer(_result_event(result))
+            return result
+
+        results = await asyncio.gather(*[invoke_and_emit(call) for call in state["plan"]])
+        return {"results": list(results)}
 
     async def synthesize_node(state: OrchestratorState) -> OrchestratorState:
+        writer = get_stream_writer()
+        writer({"type": "synthesizing"})
         client = get_client()
         prompt = (
             f"Question: {state['question']}\n\n"
@@ -130,7 +151,9 @@ def build_graph(registry: Registry, model: str = DEFAULT_MODEL):
             model=model,
             max_tokens=2048,
         )
-        return {"final_answer": response.choices[0].message.content or ""}
+        answer = response.choices[0].message.content or ""
+        writer({"type": "final", "answer": answer})
+        return {"final_answer": answer}
 
     graph = StateGraph(OrchestratorState)
     graph.add_node("plan", plan_node)

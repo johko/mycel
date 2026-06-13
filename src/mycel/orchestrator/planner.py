@@ -68,10 +68,14 @@ Available nodes:
 {registry}
 
 Plan the minimal set of node calls needed to answer the user's question.
-Phrase each query so it can succeed within the node's policy constraints
-(e.g. ask the Energy Wizards for aggregates and trends, never raw values).
-Order calls so later queries can be answered independently — nodes do not
-see each other's responses. Respond only via the submit_plan tool.\
+Forward the user's actual information need verbatim where possible — do
+NOT pre-sanitize, soften, or rephrase a query to fit a node's policies.
+Policy decisions belong to the nodes, not to you: never refuse, never
+answer the question yourself, and never skip or water down a call because
+you expect a node's policy to block it — send the real question and let
+the node's policy engine decide what leaves its environment. Order calls so later queries can be answered
+independently — nodes do not see each other's responses. You must always
+respond with a submit_plan tool call and nothing else.\
 """
 
 
