@@ -169,6 +169,15 @@
   .mode.redact { color: var(--redacted); border-color: var(--redacted); }
   .mode.oblige { color: var(--obliged); border-color: var(--obliged); }
   .node .desc { color: var(--muted); font-size: 13px; margin: 8px 0 0; min-height: 56px; }
+  .node .datatags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .node .datatag {
+    font-size: 10.5px;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
   .node .direct {
     margin-top: 10px;
     background: none;
@@ -371,6 +380,7 @@ function nodeCard(n) {
       ${n.policy_mode ? `<span class="mode ${n.policy_mode}">${n.policy_mode.toUpperCase()}</span>` : ""}
     </div>
     <p class="desc">${esc(n.description.trim())}</p>
+    ${(n.tags && n.tags.length) ? `<div class="datatags">${n.tags.map((t) => `<span class="datatag">${esc(t)}</span>`).join("")}</div>` : ""}
     <button class="direct" title="Skip the planner — send the question straight to this node">interrogate directly ↯</button>
     <div class="live">
       <div class="query"></div>

@@ -8,7 +8,7 @@ Deliberately simple — upgrade to Consul/service mesh only when needed.
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class NodeEntry(BaseModel):
@@ -18,6 +18,9 @@ class NodeEntry(BaseModel):
     endpoint: str
     # display-only hint for UIs: "deny" | "redact" | "oblige"
     policy_mode: str | None = None
+    # keyword list of the data this node holds; helps the planner route, and
+    # shared tags across nodes signal where data overlaps (and can be corroborated)
+    tags: list[str] = Field(default_factory=list)
 
 
 class Registry(BaseModel):
@@ -28,9 +31,11 @@ class Registry(BaseModel):
 
     def describe(self) -> str:
         """Capability overview fed to the planner LLM."""
-        return "\n".join(
-            f"- {n.id} ({n.title}): {n.description.strip()}" for n in self.nodes
-        )
+        lines = []
+        for n in self.nodes:
+            tags = f" [data: {', '.join(n.tags)}]" if n.tags else ""
+            lines.append(f"- {n.id} ({n.title}){tags}: {n.description.strip()}")
+        return "\n".join(lines)
 
 
 def load_registry(path: str | Path = "registry.yaml") -> Registry:

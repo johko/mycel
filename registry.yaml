@@ -7,6 +7,7 @@ nodes:
       blocked by policy.
     endpoint: http://localhost:8001
     policy_mode: deny
+    tags: [energy-consumption, power-grid, kWh, peak-load, campus-aggregate, consumption-trends, towers]
 
   - id: commons-scholars
     title: Commons Scholars
@@ -15,6 +16,7 @@ nodes:
       MICE. Open data; answers carry an attribution obligation.
     endpoint: http://localhost:8002
     policy_mode: oblige
+    tags: [research-output, publications, papers, datasets, citations, publication-statistics]
 
   - id: archivists
     title: Archivists
@@ -23,6 +25,7 @@ nodes:
       MICE. Personal names and dates of birth are redacted by policy.
     endpoint: http://localhost:8003
     policy_mode: redact
+    tags: [staffing, research-staff, personnel, institutional-events, lab-expansion, institute-history]
 
   - id: estates-keepers
     title: Estates & Facilities
@@ -33,6 +36,7 @@ nodes:
       history. Open data; attribution required.
     endpoint: http://localhost:8004
     policy_mode: oblige
+    tags: [energy-consumption, building-meters, floorspace, buildings, lab-expansion, facilities]
 
   - id: bursar-office
     title: Office of the Bursar
@@ -44,3 +48,4 @@ nodes:
       required.
     endpoint: http://localhost:8005
     policy_mode: oblige
+    tags: [energy-consumption, research-staff, budget, payroll, expenditure, energy-spend, funded-programs]
