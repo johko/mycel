@@ -1,6 +1,8 @@
 # Mycel vs. Flower — Federated Architecture Comparison
 
-Mycel is an **agentic** take on federated principles: instead of distributing model training, it federates *knowledge access* — autonomous Diplomat nodes hold private data behind OPA egress policies, and a central orchestrator queries them to answer user questions. This document maps mycel's current implementation against the concepts that make the Flower (flwr) federated learning framework tick, and identifies the gaps.
+Mycel is an **agentic** take on federated principles: instead of distributing model training, it federates *knowledge access* — autonomous Diplomat nodes hold private data behind OPA egress policies, and a central orchestrator queries them to answer user questions. This document maps mycel's implementation against the concepts that make the Flower (flwr) federated learning framework tick, tracks what has been built, and identifies the gaps that remain.
+
+> **Status:** the four-phase aggregation plan ([aggregation-strategy-plan.md](aggregation-strategy-plan.md)) is implemented and live-verified. The three biggest gaps this document originally flagged — no aggregation strategy, no structured responses, sequential execution — are now closed. See [Recently closed](#recently-closed-gaps).
 
 ---
 
@@ -35,119 +37,110 @@ Key primitives:
 
 ---
 
-## Mycel — what exists today
-
-### Parallel concepts ✅
+## Mycel — parallel concepts ✅
 
 | Flower | Mycel equivalent | Notes |
 |---|---|---|
 | ServerApp / ServerRound | `OrchestratorState` + LangGraph graph | Single-shot; no rounds |
 | ClientApp | `DiplomatAgent` (node) | Each node is its own LLM + datastore + OPA sidecar |
 | Data locality | Node data never leaves; only `/invoke` responses do | Core invariant, correctly implemented |
-| `sample_clients()` | `make_plan()` (planner LLM) | LLM decides which nodes to query and with what |
-| `configure_fit()` | Per-node `query` string in `PlannedCall` | Text, not typed parameters |
-| Client training step | `run_agent()` tool-calling loop | Agent reads records, produces prose answer |
-| Secure output filtering | OPA `evaluate_policy()` | Deny / redact / oblige — analogous to secure aggregation at the *semantic* level |
-| Audit log | `log_decision()` per node | Query hashes only; per-decision, not per-round |
-| Client registry | `registry.yaml` + `Registry` model | Static YAML; no dynamic join/leave |
-| Observability | SSE stream of `plan / node_start / node_result / synthesizing / final` events | Good; Flower exposes similar per-round metrics |
-
-### What Flower has that mycel does not ❌
-
-#### 1. A real aggregation strategy (the biggest gap)
-
-Flower's `aggregate_fit()` does a mathematically defined operation on structured data (weighted parameter averaging). Mycel's "aggregation" is the synthesizer LLM reading free-text answers and writing prose — it is non-deterministic, cannot resolve contradictions, cannot weight by confidence, and has no formal semantics.
-
-```
-Flower:  aggregate_fit([( Δw₁, n₁=500 ), ( Δw₂, n₂=300 ), …])
-         → Δw_global = (500·Δw₁ + 300·Δw₂) / 800
-
-Mycel:   synthesize_node([
-           "Energy Wizards: trend is up 12%",
-           "Archivists: consumption records are classified",
-         ])
-         → LLM writes a paragraph — no formal merge, no conflict detection
-```
-
-See [Aggregation gap — design options](#aggregation-gap--design-options) below.
-
-#### 2. Typed message protocol / structured node responses
-
-Flower nodes return `(parameters, num_examples, metrics)` — machine-readable. Mycel nodes return `{answer: str, policy_decision: PolicyDecision}` — only the policy metadata is structured; the answer itself is unstructured text.
-
-This makes it impossible to do anything programmatic with the content: you cannot aggregate numbers, detect duplicate claims, surface contradictions, or weight by confidence without LLM re-parsing.
-
-#### 3. Parallel round execution
-
-Flower can train all sampled clients in parallel (async gRPC). Mycel's `execute_node` calls nodes **sequentially** in a `for` loop — a 3-node federation is 3× slower than necessary, and there is no partial-failure resilience (if node 2 hangs, node 3 never runs within the timeout).
-
-#### 4. Multiple rounds / iterative refinement
-
-Flower converges over many rounds; later rounds can use earlier aggregate results to refine. Mycel is strictly single-shot: `plan → execute → synthesize → done`. There is no mechanism for the synthesizer to ask a follow-up question back to a node if the initial answer was incomplete.
-
-#### 5. Client sampling strategy (pluggable)
-
-In Flower, strategy.sample() is a policy you can swap: random, round-robin, power-of-choice, reputation-weighted. In mycel, "which nodes to call" is decided by the planner LLM on every request — ad-hoc, non-deterministic, and hard to audit or tune independently of the model.
-
-#### 6. Convergence / termination criteria
-
-Flower stops when a metric threshold is met or a round budget is exhausted. Mycel always does exactly one round.
-
-#### 7. Secure Aggregation
-
-Flower's SecAgg mod ensures the server sees only the *sum* of client updates, not individual updates. Mycel's OPA filtering controls what *one node* releases but gives the orchestrator full visibility into each node's answer before synthesis — there is no aggregation-level privacy guarantee.
-
-#### 8. Differential Privacy
-
-Flower has a DP mod that clips and noises updates before aggregation. Mycel has no equivalent. (OPA deny/redact is access control, not DP.)
-
-#### 9. Persistent state / global model
-
-Flower maintains a global model that improves across rounds. Mycel is stateless between requests — there is no "global knowledge artifact" that accumulates across many federation queries.
+| `sample_clients()` | `make_plan()` (planner LLM) + registry `tags` | LLM picks nodes; tags advertise data + overlap to guide it |
+| `configure_fit()` | Per-node `query` in `PlannedCall` | Planner fans the same query to nodes sharing a fact |
+| Client training step | `run_agent()` tool-calling loop | Agent reads records, produces a prose answer |
+| `(parameters, num_examples, metrics)` | `StructuredAnswer{facts, summary, caveats}` | Machine-readable `Fact{claim, value, unit, confidence, source_record}` |
+| **Strategy** (FedAvg, FedProx, …) | `AggregationStrategy` protocol (`llm` / `judgment` / `median`) | Swappable via `--strategy`, `?strategy=`, `MYCEL_STRATEGY` |
+| `aggregate_fit()` weighting by `num_examples` | confidence-weighted `judgment` / `median` | A node's vote ∝ its `confidence` |
+| Parallel client training (async gRPC) | `asyncio.gather` in `execute_node` | Nodes invoked concurrently; per-node failures isolated |
+| Secure output filtering | OPA `evaluate_policy()` | Deny / redact / oblige — semantic-level egress control |
+| per-client metrics provenance | `AggregatedResult.node_attribution` + `conflicts` | Which nodes backed each accepted claim; disagreements surfaced |
+| Audit log | `log_decision()` per node | Query hashes only; per-decision |
+| Client registry | `registry.yaml` + `Registry` (now with `tags`) | Static YAML; no dynamic join/leave |
+| Observability | SSE stream (`plan / node_start / node_result / synthesizing / final`) | Strategy name carried on the `synthesizing` event |
 
 ---
 
-## Aggregation gap — design options
+## Recently closed gaps
 
-This is the most actionable missing piece. Here are concrete directions, ordered by implementation complexity:
+These were the three headline gaps in the original version of this document. All are now implemented (see [aggregation-strategy-plan.md](aggregation-strategy-plan.md) for the phased build).
 
-### Option A — Structured node responses (low effort, high leverage)
+### 1. A real aggregation strategy — DONE
 
-Change `InvokeResponse.answer: str` to a typed schema:
-
-```python
-class StructuredAnswer(BaseModel):
-    facts: list[Fact]          # {claim: str, value: Any, unit: str | None, confidence: float}
-    summary: str               # prose for the synthesizer
-    caveats: list[str]         # policy-imposed limitations
-```
-
-The synthesizer then aggregates `facts` programmatically (union, dedup, conflict-flag) before passing the result to the LLM for final prose. This is the direct analogue of Flower's `ParameterRecord`.
-
-### Option B — Per-claim provenance tracking (medium effort)
-
-After synthesis, run a second LLM pass that re-reads the final answer and tags each sentence with the node(s) that contributed it. Surfaces when nodes agree, disagree, or when the synthesizer hallucinated beyond any node's answer.
-
-This mirrors Flower's per-client metrics aggregation — `aggregate_evaluate()` keeps track of which client contributed what to the loss.
-
-### Option C — Weighted synthesis with confidence scores (medium effort)
-
-Have each node return a `confidence: float` alongside its answer. The synthesizer prompt is augmented with these scores so it can resolve contradictions by trusting the more confident source — analogous to Flower's `num_examples`-weighted FedAvg, where clients with more data carry more weight.
-
-### Option D — Iterative follow-up rounds (high effort)
-
-After the first synthesis pass, add a second LangGraph node that detects gaps or contradictions in the synthesized answer and generates follow-up queries back to specific nodes. This is the full Flower multi-round loop, translated to the agentic domain.
-
-### Option E — Formal aggregation strategy abstraction (high effort, most aligned with Flower)
-
-Introduce a `Strategy` protocol analogous to Flower's:
+The orchestrator no longer hard-codes "an LLM writes a paragraph." `synthesize_node` delegates to a pluggable `AggregationStrategy`:
 
 ```python
 class AggregationStrategy(Protocol):
-    def aggregate(self, results: list[NodeResult]) -> AggregatedResult: ...
+    name: str
+    async def aggregate(self, question: str, results: list[NodeResult]) -> AggregatedResult: ...
 ```
 
-Implementations: `LLMSynthesis` (current), `StructuredUnion`, `ConflictAware`, `ConfidenceWeighted`. Swappable without changing the graph — exactly how Flower's `FedAvg` vs `FedProx` work.
+`STRATEGY_REGISTRY` maps names to implementations; `make_strategy()` constructs one; the graph, CLI, web API, and UI all select by name. This is the direct analogue of swapping Flower's `FedAvg` for `FedProx`.
+
+### 2. Typed message protocol / structured node responses — DONE
+
+`InvokeResponse` now carries an optional `StructuredAnswer` alongside the prose:
+
+```python
+class Fact(BaseModel):
+    claim: str
+    value: Any | None
+    unit: str | None
+    confidence: float
+    source_record: str | None
+
+class StructuredAnswer(BaseModel):
+    facts: list[Fact]
+    summary: str          # the policy-filtered prose
+    caveats: list[str]    # policy-imposed limitations
+```
+
+This is mycel's `ParameterRecord`/`MetricsRecord` — the machine-readable payload the strategies vote over. Crucially, facts are extracted **post-policy** (from the OPA-filtered `safe_answer`, not the raw agent output), so a structured fact can never carry a value the policy layer blocked. Extraction degrades to `None` on failure, so the orchestrator falls back to prose-only.
+
+### 3. Parallel client execution — DONE
+
+`execute_node` invokes nodes concurrently with `asyncio.gather`; a slow or failing node no longer blocks the rest (each result captures its own error). Results preserve plan order.
+
+---
+
+## Where mycel *diverges* from Flower (by design)
+
+Flower's aggregation is **cardinal numeric averaging**: `aggregate_fit` computes a weighted mean of model-parameter tensors. That presupposes every client reports a comparable numeric update.
+
+Mycel's nodes report **heterogeneous factual claims that may agree, disagree, or be incommensurable** — so it borrows from **computational social choice (COMSOC)** instead of averaging:
+
+- **`judgment` — judgment aggregation.** Per proposition, the nodes that opined vote; the value held by a strict (confidence-weighted) majority wins, and an issue with no majority is reported *contested* rather than averaged into a meaningless middle. Flower has no analogue — you cannot "average" a `true`/`false` claim or three different prose figures.
+- **`median` — Majority Judgment (Balinski–Laraki) / median-voter.** For numeric claims, the collective value is the confidence-weighted **median** with the min–max spread surfaced. Robust to a single overconfident node — the median-rule counterpart to Flower's mean-based FedAvg, and the kind of trimmed/robust aggregator FL research reaches for under Byzantine clients.
+
+This is a genuine conceptual contribution, not a gap: **robust social-choice aggregation of contradictory textual facts**, where a parameter mean would be undefined.
+
+To make these strategies meaningful, the demo gained **overlapping-content nodes** (Estates & Facilities, Office of the Bursar) so several departments hold the *same* fact — three carry a 2020–2024 campus-consumption figure, two carry a research-staff headcount. This is the federation analogue of Flower sampling *many clients for the same task* so there is something to aggregate.
+
+---
+
+## What Flower still has that mycel does not ❌
+
+#### 1. Multiple rounds / iterative refinement & convergence
+
+Flower converges over many rounds; later rounds refine on earlier aggregates, and the loop knows when to stop. Mycel is strictly single-shot: `plan → execute → aggregate → done`. There is no mechanism for a strategy to detect a gap (e.g. a *contested* `judgment` issue) and fire a follow-up round of queries. This is the most natural next step — a LangGraph loop that re-plans from `AggregatedResult.conflicts`.
+
+#### 2. Pluggable *sampling* strategy
+
+Flower's `sample()` is swappable (random, power-of-choice, reputation-weighted). Mycel's node selection is the planner LLM, now guided by registry `tags` and a fan-out prompt — better and more demonstrable, but still LLM-decided rather than a formal, swappable, auditable sampler. (Aggregation *is* now pluggable; sampling is not.)
+
+#### 3. Secure Aggregation
+
+Flower's SecAgg lets the server see only the *sum* of client updates. Mycel's OPA filtering governs what *one node* releases, but the orchestrator — and the COMSOC strategies — see each node's individual answer. There is no aggregation-level privacy guarantee.
+
+#### 4. Differential Privacy
+
+No clipping/noise mechanism. OPA deny/redact is access control, not DP.
+
+#### 5. Persistent state / global model
+
+Flower maintains a global model that improves across rounds. Mycel is stateless between requests — no knowledge artifact accumulates across queries.
+
+#### 6. Dynamic node join/leave
+
+Membership is a static `registry.yaml`. No runtime registration, health-gated participation, or churn handling.
 
 ---
 
@@ -156,15 +149,18 @@ Implementations: `LLMSynthesis` (current), `StructuredUnion`, `ConflictAware`, `
 | Federated principle | Flower | Mycel |
 |---|---|---|
 | Data stays local | ✅ | ✅ |
-| Typed message protocol | ✅ | ⚠ policy metadata only; answer is free text |
-| Pluggable aggregation strategy | ✅ | ❌ LLM synthesis only |
-| Parallel client execution | ✅ | ❌ sequential |
-| Multiple rounds / convergence | ✅ | ❌ single-shot |
-| Configurable client sampling | ✅ pluggable | ⚠ LLM-decided, non-deterministic |
+| Typed message protocol | ✅ | ✅ `StructuredAnswer` / `Fact` (post-policy) |
+| Pluggable aggregation strategy | ✅ | ✅ `llm` / `judgment` / `median`, runtime-selectable |
+| Robust / social-choice aggregation | ⚠ via custom strategies | ✅ COMSOC: majority + median rules |
+| Confidence / weight-aware aggregation | ✅ `num_examples` | ✅ `confidence`-weighted |
+| Provenance of aggregated result | ⚠ metrics only | ✅ `node_attribution` + `conflicts` |
+| Parallel client execution | ✅ | ✅ `asyncio.gather`, failure-isolated |
 | Policy / access control | ⚠ basic | ✅ OPA-enforced, per-field |
-| Secure aggregation | ✅ | ❌ |
-| Differential privacy | ✅ | ❌ |
-| Persistent global state | ✅ | ❌ |
+| Observability / streaming | ✅ | ✅ SSE, strategy-tagged |
 | Audit log | ⚠ via Mods | ✅ per-decision |
-| Observability / streaming | ✅ | ✅ SSE |
+| Configurable client sampling | ✅ pluggable | ⚠ LLM-decided, tag-guided (not a formal sampler) |
+| Multiple rounds / convergence | ✅ | ❌ single-shot |
+| Secure aggregation | ✅ | ❌ orchestrator sees each answer |
+| Differential privacy | ✅ | ❌ |
+| Persistent global state | ✅ | ❌ stateless |
 | Dynamic node join/leave | ✅ | ❌ static YAML |
