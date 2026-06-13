@@ -54,12 +54,20 @@ Each card also has an **"interrogate directly"** button that bypasses the
 planner and sends your question straight to one node — the most reliable
 way to watch OPA block a raw-value request.
 
+The dropdown next to the question picks the **aggregation strategy** — how the
+orchestrator combines node responses (`llm` synthesis by default, plus two
+computational-social-choice strategies, `judgment` and `median`). See
+[docs/aggregation-strategy-plan.md](docs/aggregation-strategy-plan.md) and the
+[overlap prerequisite](docs/comsoc-overlap-prerequisite.md) the COMSOC
+strategies need.
+
 The same flow is available on the command line:
 
 ```bash
 uv run mycel-ask "What is the relationship between energy consumption patterns and research output at MICE over the last decade?"
 uv run mycel-ask "What exactly did Tower A consume in 2024?"   # → blocked
 uv run mycel-ask "Who runs the Alchemy Lab?"                   # → name redacted
+uv run mycel-ask "..." --strategy judgment                     # COMSOC aggregation
 ./scripts/demo.sh                                              # all demo queries
 ```
 

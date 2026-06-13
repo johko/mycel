@@ -34,6 +34,8 @@ Rules:
 
 class LLMSynthesisStrategy:
     name = "llm"
+    label = "LLM Synthesis"
+    description = "A synthesizer LLM writes one prose answer from all node responses."
 
     def __init__(self, model: str = DEFAULT_MODEL) -> None:
         self.model = model

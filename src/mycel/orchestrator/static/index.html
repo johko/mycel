@@ -74,6 +74,30 @@
   .askbar button:hover { filter: brightness(1.12); }
   .askbar button:active { transform: scale(.98); }
   .askbar button:disabled { filter: grayscale(.7) brightness(.8); cursor: wait; }
+  .askbar select {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--text);
+    padding: 0 14px;
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color .2s;
+  }
+  .askbar select:focus { border-color: var(--gold); }
+  .askbar select:disabled { filter: grayscale(.6) brightness(.85); cursor: wait; }
+  #stratbadge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 30px; }
   .chip {
@@ -270,6 +294,7 @@
 
   <div class="askbar">
     <input id="q" placeholder="Ask the federation a question…" autocomplete="off">
+    <select id="strat" title="Aggregation strategy — how node responses are combined"></select>
     <button id="go">Ask ✦</button>
   </div>
   <div class="chips" id="chips"></div>
@@ -289,7 +314,7 @@
   </div>
 
   <div class="card" id="final">
-    <h2>✦ SYNTHESIZED ANSWER</h2>
+    <h2>✦ SYNTHESIZED ANSWER<span id="stratbadge"></span></h2>
     <div class="md" id="finalmd"></div>
   </div>
   <div id="errbar"></div>
@@ -442,6 +467,7 @@ function handle(ev) {
     drawWires(null);
   } else if (ev.type === "synthesizing") {
     setPhase("synth");
+    if (ev.strategy) $("stratbadge").textContent = ev.strategy;
   } else if (ev.type === "final") {
     setPhase("done");
     $("final").style.display = "block";
@@ -456,6 +482,7 @@ function handle(ev) {
 function stream(url) {
   resetUI();
   $("go").disabled = true;
+  $("strat").disabled = true;
   document.querySelectorAll(".direct").forEach((b) => (b.disabled = true));
   source = new EventSource(url);
   source.onmessage = (m) => {
@@ -472,6 +499,7 @@ function stream(url) {
     source.close();
     source = null;
     $("go").disabled = false;
+    $("strat").disabled = false;
     document.querySelectorAll(".direct").forEach((b) => (b.disabled = false));
   }
 }
@@ -480,7 +508,10 @@ function ask() {
   const q = $("q").value.trim();
   if (!q || source) return;
   setPhase(null);
-  stream("/api/ask?question=" + encodeURIComponent(q));
+  const strat = $("strat").value;
+  const url = "/api/ask?question=" + encodeURIComponent(q) +
+    (strat ? "&strategy=" + encodeURIComponent(strat) : "");
+  stream(url);
   setPhase("plan");
 }
 
@@ -491,6 +522,17 @@ function askDirect(nodeId) {
 }
 
 async function init() {
+  const strat = await (await fetch("/api/strategies")).json();
+  const sel = $("strat");
+  strat.strategies.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.name;
+    opt.textContent = s.label;
+    opt.title = s.description;
+    if (s.name === strat.default) opt.selected = true;
+    sel.appendChild(opt);
+  });
+
   const reg = await (await fetch("/api/registry")).json();
   const grid = $("nodes");
   reg.nodes.forEach((n) => {

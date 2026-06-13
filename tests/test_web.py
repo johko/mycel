@@ -60,3 +60,35 @@ async def test_ask_streams_events(client):
     ]
     assert [e["type"] for e in events] == ["plan", "final", "done"]
     assert events[1]["answer"] == "answer to: hello"
+
+
+async def test_strategies_endpoint_lists_registry(client):
+    async with client:
+        resp = await client.get("/api/strategies")
+    body = resp.json()
+    assert body["default"] == "llm"
+    names = {s["name"] for s in body["strategies"]}
+    assert {"llm", "judgment", "median"} <= names
+    # labels/descriptions are surfaced for the UI
+    assert all(s["label"] and s["description"] for s in body["strategies"])
+
+
+async def test_ask_accepts_strategy_param(tmp_path, monkeypatch):
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(REGISTRY_YAML)
+    seen = []
+    monkeypatch.setattr(
+        web,
+        "build_graph",
+        lambda registry, model, strat: seen.append(strat.name) or StubGraph(),
+    )
+    app = web.create_app(registry_path=str(registry_path))
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/api/ask", params={"question": "hi", "strategy": "judgment"})
+        assert resp.status_code == 200
+        # unknown strategy is rejected before streaming
+        bad = await c.get("/api/ask", params={"question": "hi", "strategy": "nope"})
+        assert bad.status_code == 400
+
+    assert "judgment" in seen

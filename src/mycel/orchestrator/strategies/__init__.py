@@ -11,10 +11,14 @@ from mycel.orchestrator.strategies.base import (
     AggregatedResult,
     AggregationStrategy,
 )
+from mycel.orchestrator.strategies.judgment import JudgmentAggregationStrategy
 from mycel.orchestrator.strategies.llm_synthesis import LLMSynthesisStrategy
+from mycel.orchestrator.strategies.majority_judgment import MajorityJudgmentStrategy
 
 STRATEGY_REGISTRY: dict[str, type] = {
     LLMSynthesisStrategy.name: LLMSynthesisStrategy,
+    JudgmentAggregationStrategy.name: JudgmentAggregationStrategy,
+    MajorityJudgmentStrategy.name: MajorityJudgmentStrategy,
 }
 
 DEFAULT_STRATEGY = LLMSynthesisStrategy.name
@@ -35,6 +39,8 @@ __all__ = [
     "AggregatedResult",
     "AggregationStrategy",
     "LLMSynthesisStrategy",
+    "JudgmentAggregationStrategy",
+    "MajorityJudgmentStrategy",
     "STRATEGY_REGISTRY",
     "DEFAULT_STRATEGY",
     "make_strategy",

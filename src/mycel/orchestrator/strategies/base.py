@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import BaseModel, Field
 
+from mycel.llm import chat_with_retry, get_client
 from mycel.schemas import PolicyDecision
 
 if TYPE_CHECKING:
@@ -71,3 +72,20 @@ def format_results(results: list[Any]) -> str:
             f"Answer: {response.answer or '(blocked by policy)'}"
         )
     return "\n\n".join(sections)
+
+
+async def synthesize_prose(
+    question: str, context: str, model: str, system_prompt: str
+) -> str:
+    """One LLM pass turning a strategy's aggregated context into prose."""
+    client = get_client()
+    response = await chat_with_retry(
+        client,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Question: {question}\n\n{context}"},
+        ],
+        model=model,
+        max_tokens=2048,
+    )
+    return response.choices[0].message.content or ""

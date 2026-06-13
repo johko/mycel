@@ -18,7 +18,11 @@ from fastapi.responses import FileResponse, StreamingResponse
 from mycel.orchestrator.graph import NODE_TIMEOUT, _invoke_node, _result_event, build_graph
 from mycel.orchestrator.planner import DEFAULT_MODEL, PlannedCall
 from mycel.orchestrator.registry import load_registry
-from mycel.orchestrator.strategies import DEFAULT_STRATEGY, make_strategy
+from mycel.orchestrator.strategies import (
+    DEFAULT_STRATEGY,
+    STRATEGY_REGISTRY,
+    make_strategy,
+)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -31,8 +35,18 @@ def create_app(
     registry = load_registry(
         registry_path or os.environ.get("REGISTRY_PATH", "registry.yaml")
     )
-    strategy_name = strategy or os.environ.get("MYCEL_STRATEGY", DEFAULT_STRATEGY)
-    graph = build_graph(registry, model, make_strategy(strategy_name, model))
+    default_strategy = strategy or os.environ.get("MYCEL_STRATEGY", DEFAULT_STRATEGY)
+
+    # one compiled graph per strategy, built lazily and reused across requests
+    graphs: dict[str, object] = {}
+
+    def graph_for(name: str | None):
+        name = name or default_strategy
+        if name not in STRATEGY_REGISTRY:
+            raise HTTPException(status_code=400, detail=f"unknown strategy {name!r}")
+        if name not in graphs:
+            graphs[name] = build_graph(registry, model, make_strategy(name, model))
+        return graphs[name]
 
     app = FastAPI(title="Mycel — MICE Federation UI")
 
@@ -44,8 +58,24 @@ def create_app(
     async def get_registry() -> dict:
         return registry.model_dump()
 
+    @app.get("/api/strategies")
+    async def get_strategies() -> dict:
+        return {
+            "default": default_strategy,
+            "strategies": [
+                {
+                    "name": name,
+                    "label": getattr(cls, "label", name),
+                    "description": getattr(cls, "description", ""),
+                }
+                for name, cls in STRATEGY_REGISTRY.items()
+            ],
+        }
+
     @app.get("/api/ask")
-    async def ask(question: str) -> StreamingResponse:
+    async def ask(question: str, strategy: str | None = None) -> StreamingResponse:
+        graph = graph_for(strategy)
+
         async def stream():
             try:
                 async for event in graph.astream(

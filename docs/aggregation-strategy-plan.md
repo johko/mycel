@@ -100,77 +100,135 @@ class InvokeResponse(BaseModel):
 
 ### Changes to `node/agent.py`
 
-After the LLM produces its prose answer, a second forced tool call extracts `Fact` objects from it. The node already has the `touched_records` — this is where the `source_record` field is populated.
+A forced tool call (`submit_facts`, same retry pattern as the planner's
+`submit_plan`) extracts `Fact` objects.
 
-New tool: `submit_structured_answer` (forced, same retry pattern as planner's `submit_plan`).
+> **Implemented deviation — extract *after* policy, not before.** The original
+> sketch ran extraction on the agent's raw answer inside `run_agent`. That
+> would let structured facts carry exactly the values OPA deny/redact strips
+> from the prose, defeating the egress invariant. Extraction therefore runs on
+> the **post-policy `safe_answer`** (`extract_facts` / `build_structured_answer`),
+> so facts provably contain no blocked value. `source_record` is attributed
+> from the touched record IDs (already public via the MCP `list_records` tool).
 
 ### Changes to `node/main.py`
 
-Populate `structured_answer` in the `/invoke` response. Fall back to `structured_answer=None` if extraction fails, so the orchestrator degrades gracefully to prose-only.
+Populate `structured_answer` in the `/invoke` response *after* `evaluate_policy`.
+`_policy_caveats()` derives `caveats` from the `PolicyDecision`. Fall back to
+`structured_answer=None` if extraction fails, so the orchestrator degrades
+gracefully to prose-only.
 
 **Deliverable:** nodes return structured facts; orchestrator can use them or ignore them.
 
 ---
 
-## Phase 3 — Concrete aggregation strategies
+## Phase 3 — Two computational-social-choice aggregation strategies
 
-Each strategy lives in its own file under `strategies/`.
+Rather than many ad-hoc heuristics, add exactly **two** strategies, both
+grounded in **computational social choice (COMSOC)** — the theory of
+aggregating individual inputs into a collective decision. They sit alongside
+`LLMSynthesisStrategy` and consume the `Fact` objects from Phase 2.
 
-### `StructuredUnionStrategy` (`strategies/structured_union.py`)
+COMSOC has two classical branches; we take one strategy from each:
 
-Aggregation logic (pure Python, no LLM):
-1. Collect all `Fact` objects across all nodes
-2. Deduplicate: group by normalized `claim` string (lowercased, stripped)
-3. For duplicates, keep the one with the highest `confidence`
-4. Build `node_attribution` map
-5. Format the deduplicated facts as a structured prompt context
-6. One LLM call for final prose (shorter prompt than today because facts are pre-structured)
+- **Judgment aggregation** — combining yes/no judgments on propositions → Strategy 1
+- **Cardinal / graded voting** — the median-grade rule → Strategy 2
 
-Best for: questions where nodes return independent, non-overlapping facts.
+### Shared preprocessing: claim alignment (`strategies/_align.py`)
 
-### `ConflictAwareStrategy` (`strategies/conflict_aware.py`)
+Both strategies need to know which facts *from different nodes* refer to the
+same underlying proposition. Free-text `claim` strings won't match exactly, so
+a shared helper `align_claims(results)` groups facts into **issues** — one
+issue = one proposition several nodes may opine on. A single LLM pass clusters
+the pooled facts into issues and, for each (issue, node), records whether the
+node asserts it and with what `value` / `confidence`. The output is a
+node × issue matrix that both strategies operate on. (Fallback when the LLM
+clustering is unavailable: normalized-string grouping of `claim`.)
 
-Aggregation logic:
-1. Run `StructuredUnion` dedup
-2. Conflict detection: for facts with the same `claim` key but different `value`, flag as a conflict
-3. Pass conflicts explicitly to the LLM with instructions to surface disagreement, not paper over it
-4. `AggregatedResult.conflicts` populated
+> **Prerequisite — overlapping queries.** Social-choice aggregation is only
+> meaningful when *multiple nodes answer the same question*. The current MICE
+> demo has heterogeneous nodes with disjoint data, so most issues would have a
+> single voter and aggregation degenerates to passthrough. To exercise these
+> strategies the planner must fan the same sub-question to several nodes — the
+> direct analogue of Flower sampling *many clients for the same task*. This is
+> a planner/demo change tracked separately; the strategies themselves are
+> agnostic to how the overlap arises.
 
-Best for: queries where nodes might contradict each other (e.g., different departments disagree on a metric).
+### Strategy 1 — `JudgmentAggregationStrategy` (`strategies/judgment.py`), name `"judgment"`
 
-### `ConfidenceWeightedStrategy` (`strategies/confidence_weighted.py`)
+Proposition-wise majority rule from judgment aggregation theory.
 
-Aggregation logic:
-1. Same as `StructuredUnion`, but when resolving duplicates, weight by `confidence * num_examples_equivalent` (node reports its own record count)
-2. Conflicts where confidence is close (within 0.1) are escalated to the LLM; clear winners are resolved programmatically
-3. Each fact in the LLM prompt carries its confidence score so the model can calibrate hedging language
+1. Run `align_claims` → node × issue matrix.
+2. For each issue, count the nodes asserting it. Accept the issue collectively
+   iff a majority assert it — optionally **confidence-weighted**, so a node's
+   vote carries weight ∝ its `confidence` and the threshold is ½·∑weights.
+3. **Discursive-dilemma detection:** when proposition-wise majority accepts a
+   set of issues that are mutually inconsistent (nodes agree on premises but
+   the majority-accepted conclusion contradicts them), flag it in
+   `AggregatedResult.conflicts` instead of silently picking one. This is the
+   signature pathology judgment aggregation studies.
+4. Build `node_attribution` (which nodes backed each accepted issue) and run a
+   short LLM prose pass over the accepted set.
 
-Best for: queries where nodes have unequal data quality or coverage.
+Best for: discrete / boolean claims where you want the federation's collective
+position *and* an honest signal when that collective position is logically
+incoherent.
 
-### `VotingStrategy` (`strategies/voting.py`) — stretch goal
+### Strategy 2 — `MajorityJudgmentStrategy` (`strategies/majority_judgment.py`), name `"median"`
 
-Nodes receive the same question; the strategy counts how many independently arrive at the same claim. Claims with majority support (`>50%` of responding nodes) are marked as high-confidence. Minority claims are surfaced but flagged. Useful when nodes are homogeneous and you want consensus rather than union.
+The median-grade rule (Balinski & Laraki's *Majority Judgment*; for numeric
+values, the median-voter estimator).
+
+1. Run `align_claims` → node × issue matrix.
+2. For each issue, collect the grades / values the asserting nodes assign
+   (grade = `confidence`; value = the fact's `value`).
+3. The collective grade is the **median** grade across asserting nodes; for
+   numeric `value`s the collective value is the (confidence-weighted) median
+   value. The median is strategyproof and robust to a single overconfident or
+   outlier node — unlike max-confidence, where the loudest node wins.
+4. Ties broken by the standard MJ procedure (drop one median grade from each
+   side, repeat).
+5. Emit the chosen value / grade per issue, surface the spread (min/max across
+   nodes) as a caveat, and run a short LLM prose pass.
+
+Best for: contested **numeric or graded** claims where nodes disagree and you
+want a robust central estimate plus an explicit disagreement spread.
+
+### Why these two (vs. the original four)
+
+They cover the two things that actually go wrong when independent nodes report
+on shared issues: (a) *do they collectively affirm a claim?* — judgment
+aggregation; (b) *when they disagree on a magnitude, what is the robust
+collective value?* — the median rule. Both carry formal guarantees (majority
+consistency; strategyproofness / robustness of the median) rather than the
+heuristic dedup of the dropped `StructuredUnion` / `ConfidenceWeighted`
+sketches.
 
 ---
 
-## Phase 4 — Strategy selection at runtime
+## Phase 4 — Strategy selection at runtime ✅
 
 ### CLI
 
 ```bash
 mycel-ask "..." --strategy llm            # default, current behavior
-mycel-ask "..." --strategy union          # StructuredUnion
-mycel-ask "..." --strategy conflict       # ConflictAware
-mycel-ask "..." --strategy confidence     # ConfidenceWeighted
+mycel-ask "..." --strategy judgment       # proposition-wise majority (judgment aggregation)
+mycel-ask "..." --strategy median         # median-grade rule (Majority Judgment)
 ```
 
 ### Web UI
 
-Dropdown on the query form (next to the question input). Strategy name stored in a query param: `GET /api/ask?question=...&strategy=union`. The SSE `plan` event includes the chosen strategy name so the UI can display it.
+Dropdown on the query form (next to the question input), populated from
+`GET /api/strategies` (name + label + description, sourced from
+`STRATEGY_REGISTRY`). Strategy passed per-request as a query param:
+`GET /api/ask?question=...&strategy=judgment`. The backend keeps one compiled
+graph per strategy (lazy, reused) and rejects unknown names with 400. The SSE
+`synthesizing` event carries the chosen strategy name, shown as a badge on the
+answer card.
 
 ### `MYCEL_STRATEGY` env var
 
-Default strategy for all requests when not overridden per-request.
+Default strategy when a request omits `strategy=` (and the CLI/web default).
 
 ---
 
@@ -188,10 +246,10 @@ src/mycel/
 │   └── strategies/
 │       ├── __init__.py                 # STRATEGY_REGISTRY, re-exports
 │       ├── base.py                     # AggregationStrategy protocol, AggregatedResult
-│       ├── llm_synthesis.py            # current behavior, extracted
-│       ├── structured_union.py         # Phase 3
-│       ├── conflict_aware.py           # Phase 3
-│       └── confidence_weighted.py      # Phase 3
+│       ├── llm_synthesis.py            # current behavior, extracted  (Phase 1 ✅)
+│       ├── _align.py                   # shared claim-alignment helper (Phase 3)
+│       ├── judgment.py                 # JudgmentAggregationStrategy   (Phase 3)
+│       └── majority_judgment.py        # MajorityJudgmentStrategy      (Phase 3)
 ```
 
 ---
@@ -200,12 +258,13 @@ src/mycel/
 
 | Phase | Effort | Risk | Delivers |
 |---|---|---|---|
-| 1 — Protocol + LLM refactor | S | Low — pure refactor | Swappable strategy, no behavior change |
-| 2 — Structured node responses | M | Medium — node API change, backward-compat needed | Machine-readable facts; Phases 3–4 unblocked |
-| 3 — Concrete strategies | M per strategy | Low — isolated files | Named policies user can select |
+| 1 — Protocol + LLM refactor ✅ | S | Low — pure refactor | Swappable strategy, no behavior change |
+| 2 — Structured node responses ✅ | M | Medium — node API change, backward-compat needed | Machine-readable facts; Phases 3–4 unblocked |
+| 3 — Two COMSOC strategies | M | Medium — claim-alignment is the hard part | `judgment` + `median` strategies |
 | 4 — Runtime selection | S | Low | Strategy surfaced in UI/CLI |
 
-Start with Phase 1 (pure refactor, can't break anything), then Phase 2 (the enabling change), then implement strategies one at a time in Phase 3.
+Phases 1 and 2 are done. Phase 3 builds the shared `align_claims` helper first
+(the hard part), then the two strategies on top of the node × issue matrix.
 
 ---
 
@@ -214,8 +273,9 @@ Start with Phase 1 (pure refactor, can't break anything), then Phase 2 (the enab
 | Flower | Mycel after this plan |
 |---|---|
 | `Strategy.aggregate_fit(results)` | `AggregationStrategy.aggregate(results)` |
-| `FedAvg`, `FedProx`, `FedYogi` | `LLMSynthesis`, `StructuredUnion`, `ConflictAware`, `ConfidenceWeighted` |
+| `FedAvg`, `FedProx`, `FedYogi` | `LLMSynthesis`, `JudgmentAggregation`, `MajorityJudgment` |
 | `ParameterRecord` (typed parameters) | `Fact` (typed claims with value + confidence) |
-| `num_examples` weighting | `confidence` weighting |
+| `num_examples` weighting | `confidence` weighting (median / majority threshold) |
+| (n/a — numeric averaging) | COMSOC aggregation: median-voter & proposition-wise majority |
 | `STRATEGY_REGISTRY` (Flower plugin system) | `STRATEGY_REGISTRY: dict[str, type[AggregationStrategy]]` |
 | Strategy set at `ServerApp` launch | Strategy set via `--strategy` / env var / query param |
