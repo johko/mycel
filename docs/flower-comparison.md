@@ -42,8 +42,8 @@ Key primitives:
 | Flower | Mycel equivalent | Notes |
 |---|---|---|
 | ServerApp / ServerRound | `OrchestratorState` + LangGraph graph | Single-shot; no rounds |
-| ClientApp | `DiplomatAgent` (node) | Each node is its own LLM + datastore + OPA sidecar |
-| Data locality | Node data never leaves; only `/invoke` responses do | Core invariant, correctly implemented |
+| ClientApp | `DiplomatAgent` (node) | LLM agent = MCP client to the owner's data connector (MCP server) + OPA sidecar |
+| Data locality | Owner's data stays behind the connector; only `/invoke` responses leave | Ingress (connector) + egress (OPA), both owner-controlled |
 | `sample_clients()` | `make_plan()` (planner LLM) + registry `tags` | LLM picks nodes; tags advertise data + overlap to guide it |
 | `configure_fit()` | Per-node `query` in `PlannedCall` | Planner fans the same query to nodes sharing a fact |
 | Client training step | `run_agent()` tool-calling loop | Agent reads records, produces a prose answer |

@@ -109,7 +109,9 @@ A forced tool call (`submit_facts`, same retry pattern as the planner's
 > from the prose, defeating the egress invariant. Extraction therefore runs on
 > the **post-policy `safe_answer`** (`extract_facts` / `build_structured_answer`),
 > so facts provably contain no blocked value. `source_record` is attributed
-> from the touched record IDs (already public via the MCP `list_records` tool).
+> from the record IDs the agent fetched — now derived from the observation log
+> via `observed_record_ids()` (the agent is an MCP client; record IDs come from
+> the connector's `list_records`/`get_record` tools).
 
 ### Changes to `node/main.py`
 

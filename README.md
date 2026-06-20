@@ -22,11 +22,16 @@ The orchestrator's aggregation strategy is pluggable (`llm` synthesis by
 default, or the `judgment` / `median` computational-social-choice strategies
 that vote across the overlapping nodes).
 
-Each Diplomat node is the same codebase configured by a YAML file
-([nodes/](nodes/)), backed by its own data store ([data/](data/)) and an OPA
-sidecar enforcing its department's egress policy ([opa/](opa/)). The policy
-judges the **outgoing answer text** against every record the agent touched —
-so a value the LLM read can't slip out through prose.
+Each Diplomat node is the same codebase configured by a YAML file. Its agent is
+an **MCP client**: it fetches data over the Model Context Protocol from a data
+connector (the company's own MCP server, or the bundled reference connector),
+and an OPA sidecar enforces the node's egress policy. The policy judges the
+**outgoing answer text** against every record the agent touched — so a value the
+LLM read can't slip out through prose.
+
+The framework (`pip install mycel`) ships **no scenario of its own**. The MICE
+demo below is optional content under `mycel.demo`, installed with the `[demo]`
+extra and laid down on disk with the `mycel-demo` command.
 
 ## Demo scenario: MICE
 
@@ -56,10 +61,19 @@ through the HF router — any tool-calling open-weights model works
 `model:provider` suffix like `moonshotai/Kimi-K2-Instruct:groq`).
 
 ```bash
-cp .env.example .env          # add your HF_TOKEN
-docker compose up --build     # 3 nodes (:8001-:8003) + 3 OPA sidecars
-uv run mycel-ui               # demo dashboard → http://localhost:7860
+docker build -t mycel:latest .       # framework image (diplomat/connector/UI)
+pip install mycel[demo]              # or, from a checkout: uv sync
+mycel-demo init mice                 # scaffold the demo assets on disk
+cd mice
+cp .env.example .env                  # add your HF_TOKEN
+docker compose up                     # 5 nodes + connectors + OPA sidecars
+mycel-ui                              # demo dashboard → http://localhost:7860
 ```
+
+`mycel-demo init <dir>` copies the demo's docker-compose stack, node configs,
+data files, OPA policies, and registry into `<dir>` (docker-compose needs real
+files on disk). The containers run the `mycel:latest` framework image and mount
+all of that content; override the image with `MYCEL_IMAGE`.
 
 The web UI shows the federation live: the planner's call plan, queries
 flowing to the department nodes, policy verdicts stamped on each card
@@ -77,12 +91,15 @@ strategies need.
 
 The same flow is available on the command line:
 
+The same flow is available on the command line (run from the scaffolded `mice/`
+directory, where `registry.yaml` lives):
+
 ```bash
-uv run mycel-ask "What is the relationship between energy consumption patterns and research output at MICE over the last decade?"
-uv run mycel-ask "What exactly did Tower A consume in 2024?"   # → blocked
-uv run mycel-ask "Who runs the Alchemy Lab?"                   # → name redacted
-uv run mycel-ask "..." --strategy judgment                     # COMSOC aggregation
-./scripts/demo.sh                                              # all demo queries
+mycel-ask "What is the relationship between energy consumption patterns and research output at MICE over the last decade?"
+mycel-ask "What exactly did Tower A consume in 2024?"   # → blocked
+mycel-ask "Who runs the Alchemy Lab?"                   # → name redacted
+mycel-ask "..." --strategy judgment                     # COMSOC aggregation
+./demo.sh                                               # all demo queries
 ```
 
 ## Node API
@@ -90,19 +107,21 @@ uv run mycel-ask "..." --strategy judgment                     # COMSOC aggregat
 | Endpoint | Description |
 |---|---|
 | `POST /invoke` | `{"query": ...}` → policy-filtered answer + decision |
-| `/mcp` | MCP (streamable HTTP) exposing the node's record tools |
 | `GET /health` | liveness |
 
+The agent is an MCP *client*; the MCP server (streamable HTTP) is the separate
+data **connector** the node connects out to, not an endpoint on the node itself.
 Every policy decision is appended to an audit log (`/var/log/diplomat/audit.log`
 in the container) — query hashes only, never content.
 
 ## Development
 
 ```bash
-uv sync                                  # install
-uv run pytest                            # Python tests
-opa test opa/energy opa/commons opa/archives   # policy tests
-NODE_CONFIG=nodes/energy.yaml uv run diplomat  # run one node locally
+uv sync                                          # install (with dev deps)
+uv run pytest                                    # Python tests
+ASSETS=src/mycel/demo/assets                     # demo content lives here now
+opa test $ASSETS/opa/energy $ASSETS/opa/commons  # policy tests (per node dir)
+NODE_CONFIG=$ASSETS/nodes/energy.yaml MCP_URL=http://localhost:9000/mcp uv run diplomat
 ```
 
 See [.claude/PROJECT.md](.claude/PROJECT.md) for architecture decisions and roadmap.

@@ -1,10 +1,25 @@
+# The image carries the mycel framework only (the `diplomat`/`connector`
+# entrypoints); all demo content is mounted from this directory. Build it from
+# the mycel source once with `docker build -t mycel:latest .`, or override
+# MYCEL_IMAGE to point at a published image.
 x-node: &node
-  build: .
+  image: ${MYCEL_IMAGE:-mycel:latest}
+  # node identity (prompt/config) is mounted per service (alongside its log
+  # volume), not baked into the image
   environment: &node-env
     HF_TOKEN: ${HF_TOKEN}
     HF_PROVIDER: ${HF_PROVIDER:-auto}
     NODE_MODEL: ${NODE_MODEL:-}
     AUDIT_LOG_PATH: /var/log/diplomat/audit.log
+
+# Reference data connector: an MCP server exposing one JSON file. In a real
+# deployment this is replaced by the company's own MCP server pointing at their
+# data sources — the agent only ever speaks MCP to it. Data reaches the
+# connector via a mounted volume; it is never baked into the image.
+x-connector: &connector
+  image: ${MYCEL_IMAGE:-mycel:latest}
+  command: ["connector"]
+  volumes: ["./data:/app/data:ro"]
 
 # Note: the static OPA image has no shell, so no wget/curl healthcheck is
 # possible. OPA starts near-instantly; plain depends_on ordering suffices.
@@ -21,8 +36,15 @@ services:
       <<: *node-env
       NODE_CONFIG: nodes/energy.yaml
       OPA_URL: http://energy-opa:8181
-    volumes: ["energy-logs:/var/log/diplomat"]
-    depends_on: [energy-opa]
+      MCP_URL: http://energy-connector:9000/mcp
+    volumes: ["energy-logs:/var/log/diplomat", "./nodes:/app/nodes:ro"]
+    depends_on: [energy-opa, energy-connector]
+
+  energy-connector:
+    <<: *connector
+    environment:
+      CONNECTOR_DATA: data/energy.json
+      CONNECTOR_NAME: energy-wizards
 
   energy-opa:
     <<: *opa
@@ -35,8 +57,15 @@ services:
       <<: *node-env
       NODE_CONFIG: nodes/commons.yaml
       OPA_URL: http://commons-opa:8181
-    volumes: ["commons-logs:/var/log/diplomat"]
-    depends_on: [commons-opa]
+      MCP_URL: http://commons-connector:9000/mcp
+    volumes: ["commons-logs:/var/log/diplomat", "./nodes:/app/nodes:ro"]
+    depends_on: [commons-opa, commons-connector]
+
+  commons-connector:
+    <<: *connector
+    environment:
+      CONNECTOR_DATA: data/commons.json
+      CONNECTOR_NAME: commons-scholars
 
   commons-opa:
     <<: *opa
@@ -49,8 +78,15 @@ services:
       <<: *node-env
       NODE_CONFIG: nodes/archives.yaml
       OPA_URL: http://archives-opa:8181
-    volumes: ["archives-logs:/var/log/diplomat"]
-    depends_on: [archives-opa]
+      MCP_URL: http://archives-connector:9000/mcp
+    volumes: ["archives-logs:/var/log/diplomat", "./nodes:/app/nodes:ro"]
+    depends_on: [archives-opa, archives-connector]
+
+  archives-connector:
+    <<: *connector
+    environment:
+      CONNECTOR_DATA: data/archives.json
+      CONNECTOR_NAME: archives
 
   archives-opa:
     <<: *opa
@@ -63,8 +99,15 @@ services:
       <<: *node-env
       NODE_CONFIG: nodes/estates.yaml
       OPA_URL: http://estates-opa:8181
-    volumes: ["estates-logs:/var/log/diplomat"]
-    depends_on: [estates-opa]
+      MCP_URL: http://estates-connector:9000/mcp
+    volumes: ["estates-logs:/var/log/diplomat", "./nodes:/app/nodes:ro"]
+    depends_on: [estates-opa, estates-connector]
+
+  estates-connector:
+    <<: *connector
+    environment:
+      CONNECTOR_DATA: data/estates.json
+      CONNECTOR_NAME: estates
 
   estates-opa:
     <<: *opa
@@ -77,8 +120,15 @@ services:
       <<: *node-env
       NODE_CONFIG: nodes/bursar.yaml
       OPA_URL: http://bursar-opa:8181
-    volumes: ["bursar-logs:/var/log/diplomat"]
-    depends_on: [bursar-opa]
+      MCP_URL: http://bursar-connector:9000/mcp
+    volumes: ["bursar-logs:/var/log/diplomat", "./nodes:/app/nodes:ro"]
+    depends_on: [bursar-opa, bursar-connector]
+
+  bursar-connector:
+    <<: *connector
+    environment:
+      CONNECTOR_DATA: data/bursar.json
+      CONNECTOR_NAME: bursar
 
   bursar-opa:
     <<: *opa

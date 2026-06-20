@@ -1,11 +1,16 @@
 """
 OPA policy client and audit logger.
 
-The policy input is the outgoing answer text plus every record the agent
-touched. OPA returns a verdict on the *text itself* — deny, redact, or
-attach obligations — so sensitive values cannot leak through prose even
-though the agent had raw access. Every decision is appended to an audit log;
-the log records which fields were involved, never the sensitive values.
+The policy input is the outgoing answer text plus the agent's observation log
+(every tool call and its result). OPA returns a verdict on the *text itself* —
+deny, redact, or attach obligations — so sensitive values cannot leak through
+prose. Every decision is appended to an audit log; the log records which fields
+were involved, never the sensitive values.
+
+For convenience, `records` is also derived from the observation log (the
+reference connector's `get_record` results, keyed by id) so a company can write
+a policy against either shape: the generic `input.observations` or the
+record-oriented `input.records`.
 """
 
 import hashlib
@@ -33,19 +38,42 @@ def configure_audit_log(path: str | Path) -> None:
     _audit_logger.setLevel(logging.INFO)
 
 
+def _records_from_observations(observations: list[dict]) -> dict[str, dict]:
+    """Reconstruct a {id: record} map from `get_record` observations.
+
+    Lets the record-oriented reference policies read `input.records` unchanged,
+    while the generic `input.observations` covers any other connector's tools.
+    """
+    records: dict[str, dict] = {}
+    for obs in observations:
+        if obs.get("tool") != "get_record":
+            continue
+        result = obs.get("result")
+        rec_id = (obs.get("arguments") or {}).get("id")
+        if isinstance(rec_id, str) and isinstance(result, dict) and "error" not in result:
+            records[rec_id] = result
+    return records
+
+
 async def evaluate_policy(
     raw: dict, config: NodeConfig
 ) -> tuple[PolicyDecision, str]:
     """
-    Send {'answer', 'records'} to OPA, return (decision, safe_answer).
+    Send {'answer', 'observations', 'records'} to OPA, return (decision, safe_answer).
 
     The safe answer comes from OPA: original text if clean, text with
     sensitive substrings replaced for redaction policies, or empty on deny.
     """
+    observations = raw.get("observations", [])
+    opa_input = {
+        "answer": raw.get("answer", ""),
+        "observations": observations,
+        "records": _records_from_observations(observations),
+    }
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.post(
             f"{config.opa_url}/v1/data/diplomat/result",
-            json={"input": raw},
+            json={"input": opa_input},
         )
         resp.raise_for_status()
         result = resp.json().get("result")

@@ -14,4 +14,3 @@ system_prompt: >
   before answering, and never answer from memory or from record labels
   alone. If the records do not contain the answer, say so. Be concise
   and do not speculate beyond what the data shows.
-data_path: data/energy.json

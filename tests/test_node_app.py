@@ -9,8 +9,17 @@ from mycel.node.main import create_app
 
 @respx.mock
 async def test_invoke_routes_through_policy(node_config, monkeypatch):
-    async def fake_agent(query, config, store):
-        return {"answer": "the value is 42", "records": {"R1": store.get_record("R1")}}
+    async def fake_agent(query, config, toolset):
+        return {
+            "answer": "the value is 42",
+            "observations": [
+                {
+                    "tool": "get_record",
+                    "arguments": {"id": "R1"},
+                    "result": {"value": 42, "sensitivity": "high"},
+                }
+            ],
+        }
 
     monkeypatch.setattr("mycel.node.main.run_agent", fake_agent)
     respx.post("http://opa.test/v1/data/diplomat/result").mock(
@@ -43,8 +52,13 @@ async def test_invoke_routes_through_policy(node_config, monkeypatch):
 
 @respx.mock
 async def test_invoke_includes_structured_answer(node_config, monkeypatch):
-    async def fake_agent(query, config, store):
-        return {"answer": "raw", "records": {"R1": store.get_record("R1")}}
+    async def fake_agent(query, config, toolset):
+        return {
+            "answer": "raw",
+            "observations": [
+                {"tool": "get_record", "arguments": {"id": "R1"}, "result": {"value": 42}}
+            ],
+        }
 
     async def fake_structured(answer, record_ids, caveats, config):
         from mycel.schemas import Fact, StructuredAnswer

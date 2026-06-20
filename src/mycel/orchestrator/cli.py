@@ -1,11 +1,11 @@
 """
 Orchestrator CLI.
 
-    mycel-ask "What is the relationship between energy consumption and
-               research output at MICE over the last decade?"
+    mycel-ask "<question for the federation>"
 
-Streams the graph's progress: the plan, each node's policy decision,
-and the synthesized answer.
+Reads the node registry (``--registry``, default ``registry.yaml`` in the
+current directory), then streams the graph's progress: the plan, each node's
+policy decision, and the synthesized answer.
 """
 
 import argparse
@@ -73,7 +73,7 @@ async def ask(question: str, registry_path: str, model: str, strategy: str) -> N
 
 def main() -> None:
     load_dotenv()  # HF_TOKEN etc.; the same .env docker compose uses
-    parser = argparse.ArgumentParser(description="Ask the MICE federation a question.")
+    parser = argparse.ArgumentParser(description="Ask the node federation a question.")
     parser.add_argument("question")
     parser.add_argument("--registry", default="registry.yaml")
     parser.add_argument("--model", default=DEFAULT_MODEL)

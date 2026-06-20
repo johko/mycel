@@ -1,9 +1,12 @@
 """
-Diplomat Agent — LLM tool-calling loop, generic over a department DataStore.
+Diplomat Agent — LLM tool-calling loop, driven by a remote MCP server.
 
-Inference runs on Hugging Face Inference Providers (OpenAI-style chat
-completions). Returns the answer text plus every record the agent touched,
-so the policy layer can judge the outgoing answer against the sensitive
+The agent is an MCP *client*: it reasons over whatever tools the configured
+MCP server (`RemoteToolset`) exposes, discovered at runtime. Inference runs on
+Hugging Face Inference Providers (OpenAI-style chat completions).
+
+Returns the answer text plus an observation log — every tool call and its
+result — so the egress policy layer can judge the outgoing answer against the
 data it was derived from. This module knows nothing about OPA.
 """
 
@@ -11,73 +14,48 @@ import json
 
 from mycel.llm import chat_with_retry, get_client, parse_tool_arguments
 from mycel.node.config import NodeConfig
-from mycel.node.datastore import DataStore
+from mycel.node.mcp_client import RemoteToolset
 from mycel.schemas import Fact, StructuredAnswer
-
-_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "list_records",
-            "description": "List all available record IDs with a short label.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_record",
-            "description": "Fetch the full contents of a record by ID.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string", "description": "Record identifier"}
-                },
-                "required": ["id"],
-            },
-        },
-    },
-]
 
 _MAX_TURNS = 10
 
 
-def _dispatch_tool(
-    name: str, args: dict, store: DataStore, touched: dict[str, dict]
-) -> object:
-    if name == "list_records":
-        return store.list_records()
-    if name == "get_record":
-        record_id = args.get("id")
-        if not record_id:
-            return {"error": "missing required argument 'id'"}
-        record = store.get_record(record_id)
-        if "error" not in record:
-            touched[record_id] = record
-        return record
-    return {"error": f"unknown tool {name!r}"}
+def observed_record_ids(observations: list[dict]) -> list[str]:
+    """Source identifiers the agent fetched, for fact attribution.
+
+    Generic over tools: any string `id`/`record_id` argument passed to a
+    successful tool call. Empty for connectors that don't address data by ID.
+    """
+    ids: list[str] = []
+    for obs in observations:
+        args = obs.get("arguments") or {}
+        for key in ("id", "record_id"):
+            val = args.get(key)
+            if isinstance(val, str) and val not in ids:
+                ids.append(val)
+    return ids
 
 
-async def run_agent(query: str, config: NodeConfig, store: DataStore) -> dict:
-    client = get_client()
+async def run_agent(query: str, config: NodeConfig, toolset: RemoteToolset) -> dict:
+    client = get_client(config.backend)
     messages: list[dict] = [
         {"role": "system", "content": config.system_prompt},
         {"role": "user", "content": query},
     ]
-    touched_records: dict[str, dict] = {}
+    observations: list[dict] = []
 
     for _ in range(_MAX_TURNS):
         response = await chat_with_retry(
             client,
             messages=messages,
             model=config.model,
-            tools=_TOOLS,
+            tools=toolset.schemas,
             max_tokens=1024,
         )
         msg = response.choices[0].message
 
         if not msg.tool_calls:
-            return {"answer": msg.content or "", "records": touched_records}
+            return {"answer": msg.content or "", "observations": observations}
 
         messages.append(
             {
@@ -99,23 +77,32 @@ async def run_agent(query: str, config: NodeConfig, store: DataStore) -> dict:
             }
         )
         for tc in msg.tool_calls:
+            name = tc.function.name
             try:
                 args = parse_tool_arguments(tc.function.arguments)
             except json.JSONDecodeError as exc:
                 # malformed arguments go back to the model instead of crashing
                 result: object = {"error": f"invalid tool arguments: {exc}"}
             else:
-                result = _dispatch_tool(tc.function.name, args, store, touched_records)
+                try:
+                    result = await toolset.call(name, args)
+                except Exception as exc:
+                    # a failed tool call goes back to the model, not the policy log
+                    result = {"error": f"tool call failed: {exc}"}
+                else:
+                    observations.append(
+                        {"tool": name, "arguments": args, "result": result}
+                    )
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": tc.id,
-                    "name": tc.function.name,
+                    "name": name,
                     "content": json.dumps(result),
                 }
             )
 
-    return {"answer": "", "records": touched_records}
+    return {"answer": "", "observations": observations}
 
 
 _EXTRACT_TOOL = {
@@ -190,7 +177,7 @@ async def extract_facts(
     if not answer.strip():
         return []
 
-    client = get_client()
+    client = get_client(config.backend)
     messages = [
         {"role": "system", "content": _EXTRACT_SYSTEM_PROMPT},
         {

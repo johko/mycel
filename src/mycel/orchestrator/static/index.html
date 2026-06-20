@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MICE — Federated Multi-Agent System</title>
+<title>Mycel — Federated Multi-Agent System</title>
 <style>
   :root {
     --bg: #0b0e1a;
@@ -297,8 +297,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>🧙 MICE — Magical Institute for Commons and Energy</h1>
-    <p>A <b>Federated Multi-Agent System</b> — every answer leaves its department only through the Jealous Wizard's policy.</p>
+    <h1 id="title">Mycel Federation</h1>
+    <p id="tagline">A <b>Federated Multi-Agent System</b> — every answer leaves its node only through that node's egress policy.</p>
   </header>
 
   <div class="askbar">
@@ -332,18 +332,6 @@
 </div>
 
 <script>
-const ICONS = {
-  "energy-wizards": "⚡", "commons-scholars": "📜", "archivists": "🗄️",
-  "estates-keepers": "🏛️", "bursar-office": "💰",
-};
-const EXAMPLES = [
-  "What was total campus energy consumption over 2020–2024, in kWh?",
-  "How many research staff did MICE have on average in 2020–2024?",
-  "What exactly was Tower A's energy consumption in 2024, in kWh?",
-  "Who is the head of the Alchemy Lab and when were they born?",
-  "What is the relationship between energy consumption patterns and research output at MICE over the last decade?",
-];
-
 const $ = (id) => document.getElementById(id);
 let source = null;
 
@@ -375,7 +363,7 @@ function nodeCard(n) {
   div.id = "node-" + n.id;
   div.innerHTML = `
     <div class="head">
-      <span class="icon">${ICONS[n.id] || "🔮"}</span>
+      <span class="icon">${esc(n.icon || "🔮")}</span>
       <h3>${esc(n.title)}</h3>
       ${n.policy_mode ? `<span class="mode ${n.policy_mode}">${n.policy_mode.toUpperCase()}</span>` : ""}
     </div>
@@ -548,13 +536,15 @@ async function init() {
   });
 
   const reg = await (await fetch("/api/registry")).json();
+  if (reg.title) { $("title").textContent = reg.title; document.title = reg.title; }
+  if (reg.tagline) { $("tagline").innerHTML = reg.tagline; }
   const grid = $("nodes");
   reg.nodes.forEach((n) => {
     const card = nodeCard(n);
     card.querySelector(".direct").onclick = () => askDirect(n.id);
     grid.appendChild(card);
   });
-  EXAMPLES.forEach((ex) => {
+  (reg.examples || []).forEach((ex) => {
     const c = document.createElement("button");
     c.className = "chip";
     c.textContent = ex;

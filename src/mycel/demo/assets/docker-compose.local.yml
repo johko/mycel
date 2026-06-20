@@ -1,0 +1,49 @@
+# Open-source / edge deployment template (overlay).
+#
+# Adds a local Ollama inference service (CPU) and runs ONE node on a local
+# model instead of the HF router — so that node's data is processed entirely
+# on this machine. The rest of the stack is unchanged.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+#
+# Any node can be made local by giving its service the same DEVICE_PROFILE env
+# + devices mount shown for commons-node below. Here we use commons-scholars
+# because it is standalone (its facts don't feed the COMSOC overlap demos).
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: ["ollama-models:/root/.ollama"]
+    environment:
+      # headroom for system prompt + records + tool round-trips
+      OLLAMA_CONTEXT_LENGTH: "8192"
+    # CPU-only: the Arc iGPU/NPU are not exposed to WSL2. On a GPU host, add:
+    #   deploy:
+    #     resources:
+    #       reservations:
+    #         devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  # one-shot: pull the model into the ollama volume, then exit
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on: [ollama]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull qwen2.5:3b-instruct"
+    restart: "no"
+
+  commons-node:
+    environment:
+      DEVICE_PROFILE: /app/devices/local-ollama.yaml
+    volumes:
+      - ./devices:/app/devices:ro
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+
+volumes:
+  ollama-models:

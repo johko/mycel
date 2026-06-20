@@ -1,6 +1,19 @@
+# Display-only branding for the web UI (the core framework ships none).
+title: 🧙 MICE — Magical Institute for Commons and Energy
+tagline: >
+  A <b>Federated Multi-Agent System</b> — every answer leaves its department
+  only through the Jealous Wizard's policy.
+examples:
+  - "What was total campus energy consumption over 2020–2024, in kWh?"
+  - "How many research staff did MICE have on average in 2020–2024?"
+  - "What exactly was Tower A's energy consumption in 2024, in kWh?"
+  - "Who is the head of the Alchemy Lab and when were they born?"
+  - "What is the relationship between energy consumption patterns and research output at MICE over the last decade?"
+
 nodes:
   - id: energy-wizards
     title: Energy Wizards
+    icon: "⚡"
     description: >
       Power grid data and consumption records of the MICE campus.
       Returns aggregates and trends only; raw consumption values are
@@ -11,6 +24,7 @@ nodes:
 
   - id: commons-scholars
     title: Commons Scholars
+    icon: "📜"
     description: >
       Public research papers, datasets, and publication statistics of
       MICE. Open data; answers carry an attribution obligation.
@@ -20,6 +34,7 @@ nodes:
 
   - id: archivists
     title: Archivists
+    icon: "🗄️"
     description: >
       Historical records, staffing history, and institutional events of
       MICE. Personal names and dates of birth are redacted by policy.
@@ -29,6 +44,7 @@ nodes:
 
   - id: estates-keepers
     title: Estates & Facilities
+    icon: "🏛️"
     description: >
       Buildings, floorspace, and building-meter energy readings of MICE.
       Holds an independent metered estimate of campus energy consumption
@@ -40,6 +56,7 @@ nodes:
 
   - id: bursar-office
     title: Office of the Bursar
+    icon: "💰"
     description: >
       Budgets, payroll, and expenditure of MICE. Holds funded
       research-staff headcounts (overlaps the Archivists' staffing

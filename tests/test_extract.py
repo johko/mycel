@@ -62,7 +62,7 @@ async def test_extract_facts_parses_tool_call(node_config, monkeypatch):
             )
         ]
     )
-    monkeypatch.setattr("mycel.node.agent.get_client", lambda: client)
+    monkeypatch.setattr("mycel.node.agent.get_client", lambda *a, **k: client)
 
     facts = await extract_facts(
         "Tower A consumption rose 12% last year.", ["AGG-1"], node_config
@@ -78,7 +78,7 @@ async def test_extract_facts_parses_tool_call(node_config, monkeypatch):
 
 async def test_extract_facts_empty_answer_skips_llm(node_config, monkeypatch):
     client = FakeClient([])  # would IndexError if the LLM were called
-    monkeypatch.setattr("mycel.node.agent.get_client", lambda: client)
+    monkeypatch.setattr("mycel.node.agent.get_client", lambda *a, **k: client)
 
     facts = await extract_facts("   ", ["R1"], node_config)
 
@@ -88,7 +88,7 @@ async def test_extract_facts_empty_answer_skips_llm(node_config, monkeypatch):
 
 async def test_extract_facts_returns_empty_when_no_tool_call(node_config, monkeypatch):
     client = FakeClient([_text_response("no tools"), _text_response("still none")])
-    monkeypatch.setattr("mycel.node.agent.get_client", lambda: client)
+    monkeypatch.setattr("mycel.node.agent.get_client", lambda *a, **k: client)
 
     facts = await extract_facts("some answer", ["R1"], node_config)
 
@@ -97,7 +97,7 @@ async def test_extract_facts_returns_empty_when_no_tool_call(node_config, monkey
 
 async def test_build_structured_answer_wraps_caveats(node_config, monkeypatch):
     client = FakeClient([_facts_response(json.dumps({"facts": []}))])
-    monkeypatch.setattr("mycel.node.agent.get_client", lambda: client)
+    monkeypatch.setattr("mycel.node.agent.get_client", lambda *a, **k: client)
 
     structured = await build_structured_answer(
         "aggregates only", ["AGG-1"], ["aggregates only — raw values blocked"], node_config

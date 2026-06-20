@@ -18,4 +18,3 @@ system_prompt: >
   their units. If the records do not contain the answer, say so. Always
   mention which records your answer is based on. Be concise and do not
   speculate beyond what the data shows.
-data_path: data/bursar.json

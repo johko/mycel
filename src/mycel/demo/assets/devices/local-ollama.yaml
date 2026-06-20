@@ -1,0 +1,15 @@
+# Device / runtime profile — open-source / edge template.
+# Points a node's agent at a local Ollama container instead of the HF router,
+# so its inference runs on this machine's own hardware (CPU here).
+#
+# hardware.* are advisory hints (could later drive automatic model selection);
+# backend is the authoritative choice. Selected via the DEVICE_PROFILE env var.
+name: laptop-ollama
+hardware:
+  cpu_threads: 14
+  ram_gb: 19
+  accelerator: none        # none | intel-gpu | cuda | metal
+backend:
+  kind: ollama
+  base_url: http://ollama:11434/v1   # the compose service name
+  model: qwen2.5:3b-instruct

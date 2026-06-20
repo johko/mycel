@@ -18,6 +18,8 @@ class NodeEntry(BaseModel):
     endpoint: str
     # display-only hint for UIs: "deny" | "redact" | "oblige"
     policy_mode: str | None = None
+    # display-only emoji/icon for UIs; falls back to a default in the frontend
+    icon: str | None = None
     # keyword list of the data this node holds; helps the planner route, and
     # shared tags across nodes signal where data overlaps (and can be corroborated)
     tags: list[str] = Field(default_factory=list)
@@ -25,6 +27,12 @@ class NodeEntry(BaseModel):
 
 class Registry(BaseModel):
     nodes: list[NodeEntry]
+    # display-only branding for the UI; the framework ships no scenario of its
+    # own, so a deployment (e.g. the demo) supplies these. The frontend falls
+    # back to generic defaults when they are absent.
+    title: str | None = None
+    tagline: str | None = None
+    examples: list[str] = Field(default_factory=list)
 
     def get(self, node_id: str) -> NodeEntry | None:
         return next((n for n in self.nodes if n.id == node_id), None)

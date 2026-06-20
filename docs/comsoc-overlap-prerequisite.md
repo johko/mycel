@@ -11,8 +11,8 @@
 > boolean claim ("lab expansion drove the growth"). Their registry descriptions
 > advertise the overlap so the planner routes cross-cutting questions to several
 > of them — no planner code change required. The `median` and `judgment`
-> strategies are now demonstrable on the live demo (see `scripts/demo.sh` steps
-> 5–6). The fan-out options below remain valid if you later want to *force*
+> strategies are now demonstrable on the live demo (see `demo.sh` steps 5–6 in a
+> `mycel-demo init` directory). The fan-out options below remain valid if you later want to *force*
 > overlap rather than rely on the planner choosing it.
 
 ## The issue

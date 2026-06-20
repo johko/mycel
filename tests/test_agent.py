@@ -1,10 +1,9 @@
-"""Agent tool loop against a fake HF Inference client."""
+"""Agent tool loop against a fake HF Inference client and a fake MCP toolset."""
 
 import json
 from types import SimpleNamespace
 
-from mycel.node.agent import run_agent
-from mycel.node.datastore import DataStore
+from mycel.node.agent import observed_record_ids, run_agent
 
 
 def _tool_call_response(name: str, arguments) -> SimpleNamespace:
@@ -41,6 +40,35 @@ class FakeClient:
         return self._responses.pop(0)
 
 
+class FakeToolset:
+    """Stands in for a RemoteToolset backed by a remote MCP server."""
+
+    def __init__(self, records):
+        self._records = records
+        self.schemas = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_record",
+                    "description": "Fetch a record by ID.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"id": {"type": "string"}},
+                        "required": ["id"],
+                    },
+                },
+            }
+        ]
+        self.calls = []
+
+    async def call(self, name, args):
+        self.calls.append((name, args))
+        if name == "get_record":
+            rec = self._records.get(args.get("id"))
+            return rec if rec is not None else {"error": "not found"}
+        raise RuntimeError(f"unknown tool {name!r}")
+
+
 async def test_run_agent_tool_loop(node_config, monkeypatch):
     client = FakeClient(
         [
@@ -48,14 +76,18 @@ async def test_run_agent_tool_loop(node_config, monkeypatch):
             _text_response("R1 has value 42."),
         ]
     )
-    monkeypatch.setattr("mycel.node.agent.get_client", lambda: client)
+    monkeypatch.setattr("mycel.node.agent.get_client", lambda *a, **k: client)
 
-    store = DataStore(node_config.data_path)
-    result = await run_agent("what is R1?", node_config, store)
+    toolset = FakeToolset({"R1": {"label": "record one", "value": 42}})
+    result = await run_agent("what is R1?", node_config, toolset)
 
     assert result["answer"] == "R1 has value 42."
-    # the touched record is surfaced for the policy layer
-    assert result["records"] == {"R1": store.get_record("R1")}
+    # the tool call is logged as an observation for the policy layer
+    assert result["observations"] == [
+        {"tool": "get_record", "arguments": {"id": "R1"}, "result": {"label": "record one", "value": 42}}
+    ]
+    # the agent was offered the toolset's discovered schemas
+    assert client.requests[0]["tools"] == toolset.schemas
 
     # second request must carry the assistant tool call and the tool result
     followup = client.requests[1]["messages"]
@@ -65,17 +97,29 @@ async def test_run_agent_tool_loop(node_config, monkeypatch):
     assert json.loads(followup[-1]["content"])["value"] == 42
 
 
-async def test_run_agent_missing_record_not_touched(node_config, monkeypatch):
+async def test_run_agent_failed_tool_not_observed(node_config, monkeypatch):
     client = FakeClient(
         [
             _tool_call_response("get_record", {"id": "NOPE"}),
             _text_response("No such record."),
         ]
     )
-    monkeypatch.setattr("mycel.node.agent.get_client", lambda: client)
+    monkeypatch.setattr("mycel.node.agent.get_client", lambda *a, **k: client)
 
-    store = DataStore(node_config.data_path)
-    result = await run_agent("what is NOPE?", node_config, store)
+    toolset = FakeToolset({"R1": {"value": 42}})
+    result = await run_agent("what is NOPE?", node_config, toolset)
 
     assert result["answer"] == "No such record."
-    assert result["records"] == {}
+    # the record returned an error, but the call still happened — it is logged,
+    # while observed_record_ids only surfaces it for attribution
+    assert result["observations"][0]["result"] == {"error": "not found"}
+
+
+def test_observed_record_ids_dedupes_and_skips_non_string():
+    obs = [
+        {"tool": "get_record", "arguments": {"id": "R1"}, "result": {}},
+        {"tool": "get_record", "arguments": {"id": "R1"}, "result": {}},
+        {"tool": "search", "arguments": {"query": "x"}, "result": []},
+        {"tool": "fetch", "arguments": {"record_id": "R2"}, "result": {}},
+    ]
+    assert observed_record_ids(obs) == ["R1", "R2"]

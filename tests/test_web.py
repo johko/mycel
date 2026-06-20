@@ -38,7 +38,9 @@ async def test_index_served(client):
     async with client:
         resp = await client.get("/")
     assert resp.status_code == 200
-    assert "MICE" in resp.text
+    # core ships a generic shell; scenario branding (MICE) comes from the
+    # registry at runtime, not the served HTML
+    assert "Mycel Federation" in resp.text
 
 
 async def test_registry_endpoint(client):

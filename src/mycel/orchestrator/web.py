@@ -1,9 +1,13 @@
 """
-Web UI for the MICE demo.
+Web UI for a Mycel federation.
 
 Serves the single-page federation dashboard and streams orchestration
 progress over SSE: plan → per-node policy verdicts → synthesized answer.
 The events come from the graph's custom stream channel (see graph.py).
+
+Branding (title, tagline, example questions, per-node icons) is read from the
+registry, so the framework ships no scenario of its own; the demo's
+registry.yaml supplies the MICE look.
 """
 
 import json
@@ -48,7 +52,7 @@ def create_app(
             graphs[name] = build_graph(registry, model, make_strategy(name, model))
         return graphs[name]
 
-    app = FastAPI(title="Mycel — MICE Federation UI")
+    app = FastAPI(title="Mycel Federation UI")
 
     @app.get("/")
     async def index() -> FileResponse:
