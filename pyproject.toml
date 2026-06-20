@@ -16,13 +16,6 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
-[project.optional-dependencies]
-# The demo's *content* (data, node configs, OPA policies, docker-compose stack)
-# ships inside the package as `mycel.demo`. Under the current split the demo
-# needs no Python deps beyond core, so this extra is the documented install
-# surface for it (`pip install mycel[demo]`) and the home for any future
-# demo-only dependency. Core (`pip install mycel`) is the framework alone.
-demo = []
 
 [project.scripts]
 diplomat = "mycel.node.main:run"
