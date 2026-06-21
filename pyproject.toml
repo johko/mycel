@@ -1,9 +1,22 @@
 [project]
 name = "mycel"
-version = "0.1.0"
-description = "Mycel: A federated multi-agent system framework. Development in progress"
+dynamic = ["version"]
+description = "Mycel: a federated multi-agent system framework with policy-governed data egress"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["multi-agent", "federated", "mcp", "llm", "agents", "opa", "data-governance"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: FastAPI",
+]
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
@@ -41,8 +54,12 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
+
+# Version is derived from the git tag (e.g. tag v0.2.0 -> 0.2.0). Never edit a
+# version by hand — cut a release by tagging. See .github/workflows/release.yml.
+[tool.setuptools_scm]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -51,3 +68,8 @@ testpaths = ["tests"]
 [[project.authors]]
 name = "Johannes Kolbe"
 email = "johko@posteo.de"
+
+[project.urls]
+Homepage = "https://github.com/johko/mycel"
+Repository = "https://github.com/johko/mycel"
+Issues = "https://github.com/johko/mycel/issues"
