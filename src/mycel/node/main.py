@@ -71,7 +71,13 @@ def create_app(config: NodeConfig | None = None) -> FastAPI:
 
         if config.opa_url:
             try:
-                decision, safe_answer = await evaluate_policy(raw, config)
+                toolset = state.get("toolset")
+                records = (
+                    await toolset.policy_view(raw.get("observations", []))
+                    if toolset is not None
+                    else {}
+                )
+                decision, safe_answer = await evaluate_policy(raw, config, records)
             except Exception as exc:
                 logging.getLogger("diplomat").exception("policy check failed")
                 raise HTTPException(

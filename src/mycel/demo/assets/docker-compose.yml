@@ -12,10 +12,12 @@ x-node: &node
     NODE_MODEL: ${NODE_MODEL:-}
     AUDIT_LOG_PATH: /var/log/diplomat/audit.log
 
-# Reference data connector: an MCP server exposing one JSON file. In a real
-# deployment this is replaced by the company's own MCP server pointing at their
-# data sources — the agent only ever speaks MCP to it. Data reaches the
-# connector via a mounted volume; it is never baked into the image.
+# Reference data connector: an MCP server fronting one data source. The backend
+# is chosen per service via CONNECTOR_KIND (json | sql | rag), so the demo shows
+# three source kinds behind one image. In a real deployment this is replaced by
+# the company's own MCP server pointing at their data sources — the agent only
+# ever speaks MCP to it. Data reaches the connector via a mounted volume; it is
+# never baked into the image.
 x-connector: &connector
   image: ${MYCEL_IMAGE:-mycel:latest}
   command: ["connector"]
@@ -85,6 +87,7 @@ services:
   archives-connector:
     <<: *connector
     environment:
+      CONNECTOR_KIND: rag
       CONNECTOR_DATA: data/archives.json
       CONNECTOR_NAME: archives
 
@@ -127,7 +130,8 @@ services:
   bursar-connector:
     <<: *connector
     environment:
-      CONNECTOR_DATA: data/bursar.json
+      CONNECTOR_KIND: sql
+      CONNECTOR_DATA: data/bursar.sql
       CONNECTOR_NAME: bursar
 
   bursar-opa:

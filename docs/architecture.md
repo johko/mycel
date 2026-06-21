@@ -18,7 +18,7 @@ graph TD
 
     subgraph CoA["COMPANY A ENVIRONMENT"]
         MCPA["MCP Server /mcp\n(reference connector or company's own)"]
-        DSA["Data sources\nJSON · SQL · APIs"]
+        DSA["Data sources\nreference: JSON · SQLite · Qdrant RAG"]
         PolicyA["OPA Policy (company-owned rego)\nallow / redact / deny — egress safety net"]
     end
 
@@ -52,15 +52,21 @@ graph TD
    API, and the fact extractor — **no company data**.
 2. **Point it at an MCP server** via `MCP_URL` (+ optional `MCP_AUTH_TOKEN`). That
    server is the company's data connector: either the bundled *reference connector*
-   (`connector` entrypoint, serving a JSON file) or the company's own MCP server
-   exposing their real data sources. The agent discovers whatever tools it offers at
-   runtime — the company decides exactly what the agent can and cannot see.
+   (`connector` entrypoint, with a `CONNECTOR_KIND` of `json`, `sql`, or `rag`) or
+   the company's own MCP server exposing their real data sources. The agent discovers
+   whatever tools it offers at runtime — different backends expose different tool
+   surfaces (record fetch, SQL query, semantic search), and the company decides exactly
+   what the agent can and cannot see.
 3. **(Optional) configure an egress policy** via `OPA_URL`, mounting their own rego.
-   The agent's outgoing answer is judged against its observation log
-   (`input.observations`, or the derived `input.records` for the reference connector's
-   shape) before it leaves the container — a safety net for highly sensitive data on
-   top of the connector's ingress control. If no `OPA_URL` is set, the node runs
-   without an egress check.
+   The agent's outgoing answer is judged against its observation log before it leaves
+   the container — a safety net for highly sensitive data on top of the connector's
+   ingress control. Policies can read the generic `input.observations` (the raw tool
+   call log), or `input.records` — a canonical `{id: record}` view the connector
+   supplies by implementing the well-known **`policy_view`** tool. Because the
+   connector owns its data shapes, `policy_view` lets one rego govern any backend
+   (the reference JSON/SQL/RAG connectors each map their results to the same record
+   shape, so the demo's deny/redact/oblige policies are identical across all three).
+   If no `OPA_URL` is set, the node runs without an egress check.
 
 Data sovereignty is therefore enforced twice: at **ingress** (the company's MCP server
 only exposes what it chooses) and, optionally, at **egress** (the company's OPA rego

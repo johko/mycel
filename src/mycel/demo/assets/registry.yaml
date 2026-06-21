@@ -37,10 +37,11 @@ nodes:
     icon: "🗄️"
     description: >
       Historical records, staffing history, and institutional events of
-      MICE. Personal names and dates of birth are redacted by policy.
+      MICE, held in a searchable document archive (semantic vector search).
+      Personal names and dates of birth are redacted by policy.
     endpoint: http://localhost:8003
     policy_mode: redact
-    tags: [staffing, research-staff, personnel, institutional-events, lab-expansion, institute-history]
+    tags: [staffing, research-staff, personnel, institutional-events, lab-expansion, institute-history, vector-search, rag]
 
   - id: estates-keepers
     title: Estates & Facilities
@@ -58,11 +59,11 @@ nodes:
     title: Office of the Bursar
     icon: "💰"
     description: >
-      Budgets, payroll, and expenditure of MICE. Holds funded
-      research-staff headcounts (overlaps the Archivists' staffing
-      history) and an energy-spend-based estimate of campus consumption
-      (overlaps the Energy Wizards' figures). Open data; attribution
-      required.
+      Budgets, payroll, and expenditure of MICE, held in a SQL database the
+      agent queries directly. Holds funded research-staff headcounts (overlaps
+      the Archivists' staffing history) and an energy-spend-based estimate of
+      campus consumption (overlaps the Energy Wizards' figures). Open data;
+      attribution required.
     endpoint: http://localhost:8005
     policy_mode: oblige
-    tags: [energy-consumption, research-staff, budget, payroll, expenditure, energy-spend, funded-programs]
+    tags: [energy-consumption, research-staff, budget, payroll, expenditure, energy-spend, funded-programs, sql, database]

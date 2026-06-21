@@ -1,9 +1,10 @@
 """
-Record store for a Diplomat node.
+Record store backing the reference connector.
 
-A flat JSON file mapping record IDs to record dicts. Inside its own
-environment the agent has full, unfiltered access — data sovereignty is
-enforced at egress by the policy layer, not by hiding data from the agent.
+A flat JSON file mapping record IDs to record dicts. The connector's MCP
+server exposes these records to the agent; inside its own environment the
+agent has full, unfiltered access — data sovereignty is enforced at egress
+by the policy layer, not by hiding data from the agent.
 """
 
 import json

@@ -7,10 +7,11 @@ deny, redact, or attach obligations — so sensitive values cannot leak through
 prose. Every decision is appended to an audit log; the log records which fields
 were involved, never the sensitive values.
 
-For convenience, `records` is also derived from the observation log (the
-reference connector's `get_record` results, keyed by id) so a company can write
-a policy against either shape: the generic `input.observations` or the
-record-oriented `input.records`.
+`records` is the connector's canonical {id: record} view of what the agent
+touched, supplied by the caller (via the connector's `policy_view` tool). It
+lets record-oriented policies read `input.records`; it is `{}` for connectors
+that don't implement `policy_view`, leaving the generic `input.observations` as
+the policy surface.
 """
 
 import hashlib
@@ -38,37 +39,21 @@ def configure_audit_log(path: str | Path) -> None:
     _audit_logger.setLevel(logging.INFO)
 
 
-def _records_from_observations(observations: list[dict]) -> dict[str, dict]:
-    """Reconstruct a {id: record} map from `get_record` observations.
-
-    Lets the record-oriented reference policies read `input.records` unchanged,
-    while the generic `input.observations` covers any other connector's tools.
-    """
-    records: dict[str, dict] = {}
-    for obs in observations:
-        if obs.get("tool") != "get_record":
-            continue
-        result = obs.get("result")
-        rec_id = (obs.get("arguments") or {}).get("id")
-        if isinstance(rec_id, str) and isinstance(result, dict) and "error" not in result:
-            records[rec_id] = result
-    return records
-
-
 async def evaluate_policy(
-    raw: dict, config: NodeConfig
+    raw: dict, config: NodeConfig, records: dict[str, dict] | None = None
 ) -> tuple[PolicyDecision, str]:
     """
     Send {'answer', 'observations', 'records'} to OPA, return (decision, safe_answer).
 
-    The safe answer comes from OPA: original text if clean, text with
-    sensitive substrings replaced for redaction policies, or empty on deny.
+    `records` is the connector's canonical {id: record} view (from `policy_view`);
+    pass `{}`/None for connectors that don't supply one. The safe answer comes
+    from OPA: original text if clean, text with sensitive substrings replaced for
+    redaction policies, or empty on deny.
     """
-    observations = raw.get("observations", [])
     opa_input = {
         "answer": raw.get("answer", ""),
-        "observations": observations,
-        "records": _records_from_observations(observations),
+        "observations": raw.get("observations", []),
+        "records": records or {},
     }
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.post(

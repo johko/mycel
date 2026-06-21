@@ -18,6 +18,11 @@ from mcp.client.streamable_http import streamablehttp_client
 
 from mycel.node.config import McpClientConfig
 
+# Reserved tool a connector may implement to feed the OPA egress layer a
+# canonical {id: record} view (see mycel.demo.connector.policy). It is hidden
+# from the agent's tool list and called only by the node after the agent loop.
+POLICY_VIEW_TOOL = "policy_view"
+
 
 def _to_openai_tool(tool) -> dict:
     """Translate an MCP Tool into the OpenAI chat-completion tool schema."""
@@ -29,6 +34,17 @@ def _to_openai_tool(tool) -> dict:
             "parameters": tool.inputSchema or {"type": "object", "properties": {}},
         },
     }
+
+
+def _partition_tools(tools) -> tuple[list[dict], bool]:
+    """Split discovered tools into agent-facing schemas and the reserved one.
+
+    `policy_view` is excluded from the agent's schemas (so the model never sees
+    it) but its presence is reported so the node can call it for the OPA layer.
+    """
+    has_policy_view = any(t.name == POLICY_VIEW_TOOL for t in tools)
+    schemas = [_to_openai_tool(t) for t in tools if t.name != POLICY_VIEW_TOOL]
+    return schemas, has_policy_view
 
 
 def _reduce_result(result) -> object:
@@ -62,15 +78,19 @@ def _reduce_result(result) -> object:
 class RemoteToolset:
     """The discovered tools of a remote MCP server, plus a call dispatcher.
 
-    `schemas` are ready to hand to `chat_completion(tools=...)`. `call` is
-    serialized by a lock because a single MCP session is shared across all
-    concurrent /invoke requests handled by this process.
+    `schemas` are the agent-facing tools, ready to hand to
+    `chat_completion(tools=...)` — the reserved `policy_view` tool is excluded
+    so the model never sees it. `call` is serialized by a lock because a single
+    MCP session is shared across all concurrent /invoke requests in this process.
     """
 
-    def __init__(self, session: ClientSession, schemas: list[dict]):
+    def __init__(
+        self, session: ClientSession, schemas: list[dict], *, has_policy_view: bool = False
+    ):
         self._session = session
         self._lock = asyncio.Lock()
         self.schemas = schemas
+        self.has_policy_view = has_policy_view
 
     @property
     def tool_names(self) -> list[str]:
@@ -80,6 +100,16 @@ class RemoteToolset:
         async with self._lock:
             result = await self._session.call_tool(name, args)
         return _reduce_result(result)
+
+    async def policy_view(self, observations: list[dict]) -> dict:
+        """Canonical {id: record} view for OPA, or {} if unsupported/failed."""
+        if not self.has_policy_view:
+            return {}
+        try:
+            result = await self.call(POLICY_VIEW_TOOL, {"observations": observations})
+        except Exception:
+            return {}
+        return result if isinstance(result, dict) else {}
 
 
 @asynccontextmanager
@@ -100,13 +130,16 @@ async def connect_toolset(mcp_cfg: McpClientConfig, *, attempts: int = 3):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     listed = await session.list_tools()
-                    schemas = [_to_openai_tool(t) for t in listed.tools]
+                    # Reserve policy_view: keep it callable but hide it from the agent.
+                    schemas, has_policy_view = _partition_tools(listed.tools)
                     if not schemas:
                         raise RuntimeError(
                             f"MCP server at {mcp_cfg.url} exposed no tools"
                         )
                     yielded = True
-                    yield RemoteToolset(session, schemas)
+                    yield RemoteToolset(
+                        session, schemas, has_policy_view=has_policy_view
+                    )
                     return
         except Exception as exc:
             if yielded:

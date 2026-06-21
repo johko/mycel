@@ -55,6 +55,41 @@ async def test_evaluate_policy_deny(node_config):
 
 
 @respx.mock
+async def test_evaluate_policy_forwards_records_and_observations(node_config):
+    captured = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content)["input"])
+        return Response(200, json={"result": {"allow": True, "answer": "ok"}})
+
+    respx.post("http://opa.test/v1/data/diplomat/result").mock(side_effect=_capture)
+
+    observations = [{"tool": "query", "arguments": {}, "result": [{"source": "S"}]}]
+    records = {"sql:0": {"source": "S"}}
+    await evaluate_policy(
+        {"answer": "ok", "observations": observations}, node_config, records
+    )
+
+    # records (from the connector's policy_view) reach OPA verbatim, alongside
+    # the raw observation log
+    assert captured["records"] == records
+    assert captured["observations"] == observations
+
+
+@respx.mock
+async def test_evaluate_policy_defaults_records_to_empty(node_config):
+    captured = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content)["input"])
+        return Response(200, json={"result": {"allow": True, "answer": "ok"}})
+
+    respx.post("http://opa.test/v1/data/diplomat/result").mock(side_effect=_capture)
+    await evaluate_policy({"answer": "ok"}, node_config)
+    assert captured["records"] == {}
+
+
+@respx.mock
 async def test_evaluate_policy_missing_result_raises(node_config):
     respx.post("http://opa.test/v1/data/diplomat/result").mock(
         return_value=Response(200, json={})

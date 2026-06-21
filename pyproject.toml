@@ -17,9 +17,14 @@ dependencies = [
 ]
 
 
+[project.optional-dependencies]
+# The reference RAG connector backend. SQLite is stdlib, so only Qdrant +
+# fastembed (CPU/ONNX embeddings) are extra. Pulled by the demo image.
+demo = ["qdrant-client[fastembed]>=1.7"]
+
 [project.scripts]
 diplomat = "mycel.node.main:run"
-connector = "mycel.connector.main:run"
+connector = "mycel.demo.connector.main:run"
 mycel-ask = "mycel.orchestrator.cli:main"
 mycel-ui = "mycel.orchestrator.web:run"
 mycel-demo = "mycel.demo.cli:main"

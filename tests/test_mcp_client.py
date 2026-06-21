@@ -4,7 +4,13 @@ from types import SimpleNamespace
 
 from mcp.types import CallToolResult, TextContent
 
-from mycel.node.mcp_client import _reduce_result, _to_openai_tool
+from mycel.node.mcp_client import (
+    POLICY_VIEW_TOOL,
+    RemoteToolset,
+    _partition_tools,
+    _reduce_result,
+    _to_openai_tool,
+)
 
 
 def test_to_openai_tool_translates_schema():
@@ -66,3 +72,55 @@ def test_reduce_result_unwraps_structured_result_envelope():
 def test_reduce_result_uses_structured_content():
     result = CallToolResult(content=[], structuredContent={"value": 7})
     assert _reduce_result(result) == {"value": 7}
+
+
+def _tool(name):
+    return SimpleNamespace(name=name, description="", inputSchema=None)
+
+
+def test_partition_hides_policy_view_from_agent_schemas():
+    schemas, has_policy_view = _partition_tools(
+        [_tool("get_record"), _tool(POLICY_VIEW_TOOL), _tool("search")]
+    )
+    assert has_policy_view is True
+    names = [s["function"]["name"] for s in schemas]
+    assert names == ["get_record", "search"]
+    assert POLICY_VIEW_TOOL not in names
+
+
+def test_partition_without_policy_view():
+    schemas, has_policy_view = _partition_tools([_tool("get_record")])
+    assert has_policy_view is False
+    assert len(schemas) == 1
+
+
+class _FakeSession:
+    def __init__(self, structured):
+        self._structured = structured
+        self.calls = []
+
+    async def call_tool(self, name, args):
+        self.calls.append((name, args))
+        return CallToolResult(content=[], structuredContent=self._structured)
+
+
+async def test_policy_view_returns_empty_when_unsupported():
+    toolset = RemoteToolset(_FakeSession(None), schemas=[], has_policy_view=False)
+    assert await toolset.policy_view([{"tool": "get_record"}]) == {}
+
+
+async def test_policy_view_calls_reserved_tool_when_supported():
+    session = _FakeSession({"R1": {"value": 42}})
+    toolset = RemoteToolset(session, schemas=[], has_policy_view=True)
+    records = await toolset.policy_view([{"tool": "get_record", "arguments": {"id": "R1"}}])
+    assert records == {"R1": {"value": 42}}
+    assert session.calls[0][0] == POLICY_VIEW_TOOL
+
+
+async def test_policy_view_swallows_errors():
+    class _Boom:
+        async def call_tool(self, name, args):
+            raise RuntimeError("boom")
+
+    toolset = RemoteToolset(_Boom(), schemas=[], has_policy_view=True)
+    assert await toolset.policy_view([]) == {}

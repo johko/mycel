@@ -1,4 +1,4 @@
-from mycel.node.datastore import DataStore
+from mycel.demo.connector.datastore import DataStore
 
 
 def test_list_records(node_config):
