@@ -20,11 +20,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
       # Cache the RAG connector's embedding model so it isn't re-downloaded.
+      # fastembed caches to /tmp/fastembed_cache by default.
       - name: Cache embedding model
         uses: actions/cache@v4
         with:
-          path: ~/.cache/huggingface
-          key: hf-bge-small-en-v1.5
+          path: |
+            /tmp/fastembed_cache
+            ~/.cache/huggingface
+          key: fastembed-bge-small-en-v1.5
       # --extra demo pulls qdrant+fastembed so the SQL/RAG connector tests run
       # (without it those tests skip).
       - name: Install

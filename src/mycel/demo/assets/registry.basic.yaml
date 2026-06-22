@@ -1,0 +1,46 @@
+# Intro-demo registry: the three original, non-overlapping departments.
+# Use this to show the core federation (plan → per-node egress policy →
+# synthesis) before introducing data overlap and the aggregation-strategy
+# selector (see registry.yaml for the full five-node setup).
+title: 🧙 MICE — Magical Institute for Commons and Energy
+tagline: >
+  A <b>Federated Multi-Agent System</b> — every answer leaves its department
+  only through the Jealous Wizard's policy.
+examples:
+  - "What was total campus energy consumption over 2020–2024, in kWh?"
+  - "What exactly was Tower A's energy consumption in 2024, in kWh?"
+  - "Who is the head of the Alchemy Lab and when were they born?"
+  - "How many research papers did MICE publish in 2023?"
+
+nodes:
+  - id: energy-wizards
+    title: Energy Wizards
+    icon: "⚡"
+    description: >
+      Power grid data and consumption records of the MICE campus.
+      Returns aggregates and trends only; raw consumption values are
+      blocked by policy.
+    endpoint: http://localhost:8001
+    policy_mode: deny
+    tags: [energy-consumption, power-grid, kWh, peak-load, campus-aggregate, consumption-trends, towers]
+
+  - id: commons-scholars
+    title: Commons Scholars
+    icon: "📜"
+    description: >
+      Public research papers, datasets, and publication statistics of
+      MICE. Open data; answers carry an attribution obligation.
+    endpoint: http://localhost:8002
+    policy_mode: oblige
+    tags: [research-output, publications, papers, datasets, citations, publication-statistics]
+
+  - id: archivists
+    title: Archivists
+    icon: "🗄️"
+    description: >
+      Historical records, staffing history, and institutional events of
+      MICE, held in a searchable document archive (semantic vector search).
+      Personal names and dates of birth are redacted by policy.
+    endpoint: http://localhost:8003
+    policy_mode: redact
+    tags: [staffing, research-staff, personnel, institutional-events, lab-expansion, institute-history, vector-search, rag]

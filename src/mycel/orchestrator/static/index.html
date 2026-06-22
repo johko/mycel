@@ -534,6 +534,8 @@ async function init() {
     if (s.name === strat.default) opt.selected = true;
     sel.appendChild(opt);
   });
+  // Nothing to choose when the deployment locks to a single strategy — hide it.
+  if (strat.strategies.length <= 1) sel.style.display = "none";
 
   const reg = await (await fetch("/api/registry")).json();
   if (reg.title) { $("title").textContent = reg.title; document.title = reg.title; }

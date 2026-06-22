@@ -31,6 +31,18 @@ from mycel.orchestrator.strategies import (
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _allowed_strategies(raw: str | None) -> list[str]:
+    """Parse the MYCEL_STRATEGIES allowlist; default to all registered ones.
+
+    Comma-separated names, order preserved (the first is the fallback default).
+    Unknown names are dropped; an empty/all-unknown value falls back to all.
+    """
+    if not raw:
+        return list(STRATEGY_REGISTRY)
+    names = [n.strip() for n in raw.split(",") if n.strip() in STRATEGY_REGISTRY]
+    return names or list(STRATEGY_REGISTRY)
+
+
 def create_app(
     registry_path: str | None = None,
     model: str = DEFAULT_MODEL,
@@ -39,14 +51,21 @@ def create_app(
     registry = load_registry(
         registry_path or os.environ.get("REGISTRY_PATH", "registry.yaml")
     )
+
+    # Optional allowlist: MYCEL_STRATEGIES restricts which strategies the UI
+    # offers (and accepts). Lets a deployment lock to one strategy — e.g. an
+    # intro demo that exposes only `llm` and hides the selector entirely.
+    allowed = _allowed_strategies(os.environ.get("MYCEL_STRATEGIES"))
     default_strategy = strategy or os.environ.get("MYCEL_STRATEGY", DEFAULT_STRATEGY)
+    if default_strategy not in allowed:
+        default_strategy = allowed[0]
 
     # one compiled graph per strategy, built lazily and reused across requests
     graphs: dict[str, object] = {}
 
     def graph_for(name: str | None):
         name = name or default_strategy
-        if name not in STRATEGY_REGISTRY:
+        if name not in allowed:
             raise HTTPException(status_code=400, detail=f"unknown strategy {name!r}")
         if name not in graphs:
             graphs[name] = build_graph(registry, model, make_strategy(name, model))
@@ -69,10 +88,10 @@ def create_app(
             "strategies": [
                 {
                     "name": name,
-                    "label": getattr(cls, "label", name),
-                    "description": getattr(cls, "description", ""),
+                    "label": getattr(STRATEGY_REGISTRY[name], "label", name),
+                    "description": getattr(STRATEGY_REGISTRY[name], "description", ""),
                 }
-                for name, cls in STRATEGY_REGISTRY.items()
+                for name in allowed
             ],
         }
 

@@ -11,6 +11,7 @@ remote server chooses to expose. Data sovereignty starts at this boundary
 
 import asyncio
 import json
+import logging
 from contextlib import asynccontextmanager
 
 from mcp import ClientSession
@@ -113,12 +114,15 @@ class RemoteToolset:
 
 
 @asynccontextmanager
-async def connect_toolset(mcp_cfg: McpClientConfig, *, attempts: int = 3):
+async def connect_toolset(mcp_cfg: McpClientConfig, *, attempts: int = 10):
     """Open a session to the remote MCP server and discover its tools.
 
     Stays open for the caller's lifetime (managed by the app lifespan).
-    Connection/discovery is retried with backoff — like `chat_with_retry` —
-    so a connector that is slow to come up does not kill the node.
+    Connection/discovery is retried with capped backoff — like `chat_with_retry`
+    — so a connector that is slow to come up does not kill the node. The budget
+    (~40s by default) must cover the slowest connector's cold start: the RAG
+    backend, for instance, only binds its port after loading its embedding model
+    and building the index (several seconds even warm).
     """
     last_error: Exception | None = None
     yielded = False
@@ -145,7 +149,16 @@ async def connect_toolset(mcp_cfg: McpClientConfig, *, attempts: int = 3):
             if yielded:
                 raise  # error came from the caller's body, not from setup
             last_error = exc
-            await asyncio.sleep(1 + attempt)
+            if attempt < attempts - 1:
+                logging.getLogger("diplomat").info(
+                    "MCP server at %s not ready (attempt %d/%d): %s",
+                    mcp_cfg.url,
+                    attempt + 1,
+                    attempts,
+                    exc,
+                )
+                await asyncio.sleep(min(1 + attempt, 5))
     raise RuntimeError(
-        f"could not connect to MCP server at {mcp_cfg.url}: {last_error}"
+        f"could not connect to MCP server at {mcp_cfg.url} "
+        f"after {attempts} attempts: {last_error}"
     ) from last_error
